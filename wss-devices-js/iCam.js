@@ -557,6 +557,12 @@ class TD100Client {
     }
 
     _applyCameraStatus(status) {
+        // "Busy" es el estado normal mientras hay una vista previa/captura activa (el propio
+        // SDK lo reporta así apenas se abre camera.preview.start) -- con vista previa continua
+        // esto es el estado de todos los días, no una desconexión. Solo Disconnected/Connecting/
+        // Error cuentan como "no conectada".
+        if (status === "Busy") return;
+
         const connected = status === "Connected";
         if (connected && !this.cameraConnected) {
             this.cameraConnected = true;
@@ -568,6 +574,7 @@ class TD100Client {
         } else if (!connected && this.cameraConnected) {
             this.cameraConnected = false;
             this.lastLiveTs = 0;
+            this._stopPreview();
             this.resetLive();
             if (this.autoFaceUIActive) {
                 this._cancelAutoFace("Cámara desconectada", "warning");
