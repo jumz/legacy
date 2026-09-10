@@ -14,16 +14,16 @@
  * el protocolo real de BiometricBridge.App (WSS-DEVICES) -- el mismo puente que ya usa
  * idms-shadcn. Ver el README de WSS-DEVICES, sección "Protocolo WebSocket".
  *
- * Simplificación conocida (documentada, no un bug): el archivo original mantenía `liveImg`
- * actualizado con un stream continuo de video mientras la cámara estuviera conectada, sin
- * importar si había una captura en curso. WSS-DEVICES solo transmite frames de vista previa
- * DURANTE una sesión de captura explícita (`camera.preview.start` ... `camera.preview.stop`),
- * no de forma continua e "idle". Por eso aquí `liveImg` solo muestra imagen mientras
- * captureFace()/captureIris() están en curso, quedando en blanco el resto del tiempo. Si
- * idms_legacy necesita vista previa continua fuera de una captura, hay que abrir una sesión de
- * preview permanente al conectar en vez de una por captura -- no se hizo así aquí porque
- * mantener el candado de cámara tomado indefinidamente competiría con otras pestañas/páginas
- * que también quieran usarla.
+ * Vista previa continua (decisión confirmada con el usuario -- replica el comportamiento del
+ * original): en cuanto la cámara confirma "Connected" se abre una sesión de vista previa
+ * (`camera.preview.start`) en el modo `config.previewMode` (default "face") y se deja abierta
+ * mientras la página esté conectada -- `liveImg` se actualiza en vivo todo el tiempo, no solo
+ * durante una captura. captureFace()/autoFace() reutilizan esa misma sesión (mismo modo) sin
+ * abrir una nueva; al terminar una captura (éxito, error o cancelación) se retoma la vista
+ * previa en vez de cerrarla. Esto mantiene el candado de cámara tomado todo el tiempo que la
+ * página esté abierta -- aceptable porque solo una estación usa la cámara a la vez. Si una
+ * página necesita vista previa de iris en vez de rostro, pasar `config.previewMode = "iris"`
+ * (y opcionalmente `config.previewEye`, default "both").
  *
  * setLed/sleep/wakeup/toggleSleep/captureScene: sin equivalente en WSS-DEVICES hoy (decisión ya
  * tomada, ver plan) -- quedan como no-op seguro (no truenan, actualizan el status a un mensaje
@@ -53,6 +53,11 @@ class TD100Client {
 
         this.wsUrl = config.wsUrl;
 
+        // Modo de la vista previa continua que se abre en cuanto la cámara conecta -- ver nota
+        // de "Vista previa continua" al inicio del archivo.
+        this.previewMode = config.previewMode || "face";
+        this.previewEye = config.previewEye || "both";
+
         // IMGs
         this.liveImg = config.liveImg;
         this.faceImg = config.faceImg;
@@ -81,7 +86,7 @@ class TD100Client {
         this.manualFaceTimer = null;
 
         // Sesión de vista previa de cámara actualmente abierta contra WSS-DEVICES (ver nota de
-        // "simplificación conocida" arriba) -- null cuando no hay ninguna.
+        // "Vista previa continua" arriba) -- null cuando no hay ninguna.
         this._previewRequestId = null;
         this._previewMode = null; // "face" | "iris"
         this._previewEye = null;  // solo aplica a "iris": "both" | "right" | "left"
@@ -195,8 +200,9 @@ class TD100Client {
                 return;
             }
 
-            // Cámara conectada pero aún sin live (esperado: solo hay live mientras hay una
-            // captura en curso, ver nota de "simplificación conocida" arriba)
+            // Cámara conectada pero aún sin el primer frame de vista previa (normal justo
+            // después de conectar, mientras se abre la sesión continua -- ver nota de "Vista
+            // previa continua" arriba)
             if (this.lastLiveTs === 0) {
                 return;
             }
@@ -232,7 +238,7 @@ class TD100Client {
 
                 // Libera botón y avisa
                 this.clearBusy();
-                this._stopPreview();
+                this._resumeIdlePreview();
                 if (!this.autoFaceUIActive) {
                     this.setStatus("No se recibió la imagen. Reintenta la captura.", "danger");
                 }
@@ -544,7 +550,7 @@ class TD100Client {
                 this.clearCapturePending();
                 this.expectManualFace = false;
                 this.clearBusy();
-                this._stopPreview();
+                this._resumeIdlePreview();
                 this.setStatus(msg.message || "Error de captura", "danger");
                 break;
         }
@@ -558,6 +564,7 @@ class TD100Client {
             this.lastLiveTs = 0;
             this._autoWakeDone = false;
             this.setStatus("Cámara conectada", "success");
+            this._resumeIdlePreview();
         } else if (!connected && this.cameraConnected) {
             this.cameraConnected = false;
             this.lastLiveTs = 0;
@@ -597,13 +604,13 @@ class TD100Client {
         });
 
         this.clearCapturePending();
-        this._stopPreview();
+        this._resumeIdlePreview();
         this.finishCaptureStatus();
     }
 
     // ============================================================
-    // 🎥 SESIÓN DE VISTA PREVIA (interno) -- ver nota de "simplificación conocida" al inicio
-    // del archivo: WSS-DEVICES solo transmite frames dentro de una sesión explícita.
+    // 🎥 SESIÓN DE VISTA PREVIA (interno) -- ver nota de "Vista previa continua" al inicio
+    // del archivo.
     // ============================================================
 
     _uuid() {
@@ -637,6 +644,14 @@ class TD100Client {
         this._previewRequestId = null;
         this._previewMode = null;
         this._previewEye = null;
+    }
+
+    // Vuelve al modo de vista previa "idle" configurado (config.previewMode) tras terminar una
+    // captura (éxito, error o cancelación) -- en vez de dejar la vista en blanco, ver nota de
+    // "Vista previa continua" al inicio del archivo.
+    _resumeIdlePreview() {
+        if (!this.cameraConnected) return;
+        this._startPreview(this.previewMode, this.previewMode === "iris" ? this.previewEye : undefined);
     }
 
     // ============================================================
@@ -785,7 +800,7 @@ class TD100Client {
         if (this._autoFaceSessionTimer) { clearTimeout(this._autoFaceSessionTimer); this._autoFaceSessionTimer = null; }
         this.autoFaceUIActive = false;
         this._autoFaceCapturing = false;
-        this._stopPreview();
+        this._resumeIdlePreview();
         this.setStatus(`AutoFace OK (${this._autoFaceAttempt}/${this._autoFaceMaxAttempts})`, "success");
     }
 
@@ -810,7 +825,11 @@ class TD100Client {
     _cancelAutoFace(statusText, color) {
         if (this._autoFaceSessionTimer) { clearTimeout(this._autoFaceSessionTimer); this._autoFaceSessionTimer = null; }
         this._resetAutoFaceState();
-        this._stopPreview();
+        if (this.cameraConnected) {
+            this._resumeIdlePreview();
+        } else {
+            this._stopPreview();
+        }
         this.setStatus(statusText, color);
     }
 
