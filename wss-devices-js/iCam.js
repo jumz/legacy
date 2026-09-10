@@ -25,9 +25,23 @@
  * mantener el candado de cámara tomado indefinidamente competiría con otras pestañas/páginas
  * que también quieran usarla.
  *
- * setLed/sleep/wakeup/toggleSleep/autoFace/captureScene: sin equivalente en WSS-DEVICES hoy
- * (decisión ya tomada, ver plan) -- quedan como no-op seguro (no truenan, actualizan el status
- * a un mensaje claro de "no disponible" en vez de fingir que funcionaron).
+ * setLed/sleep/wakeup/toggleSleep/captureScene: sin equivalente en WSS-DEVICES hoy (decisión ya
+ * tomada, ver plan) -- quedan como no-op seguro (no truenan, actualizan el status a un mensaje
+ * claro de "no disponible" en vez de fingir que funcionaron).
+ *
+ * autoFace(enable): el original delegaba la detección "¿el rostro ya es válido para capturar?"
+ * al firmware de la cámara (ICAO), que mandaba mensajes `autoFace` con status
+ * running/capturing/invalid_full/success. WSS-DEVICES no tiene ese modo -- en vez de dejarlo como
+ * no-op (lo que rompería esta pantalla, que solo tiene botones de captura automática, sin botón
+ * manual), se SIMULA en el navegador: se abre una vista previa continua y, con un canvas oculto,
+ * se compara cada frame contra el anterior (downscale a 48x36 + diferencia media de luminancia).
+ * Cuando la imagen se mantiene "quieta" varios frames seguidos (persona posicionada, sin
+ * movimiento) se dispara una captura real (`camera.capture`). No hay validación real de
+ * "¿es un rostro válido, encuadrado, ICAO?" -- eso requeriría procesamiento de imagen que el
+ * puente no ofrece hoy; cualquier captura que el hardware devuelva sin error se toma como éxito.
+ * Umbral y frames requeridos (`_autoFaceStableThreshold`/`_autoFaceRequiredStableFrames`) son
+ * valores de partida sin calibrar contra hardware real -- ajustar si captura demasiado rápido
+ * (con la persona aún moviéndose) o nunca dispara (persona quieta pero no detectada como tal).
  */
 class TD100Client {
 
@@ -51,10 +65,6 @@ class TD100Client {
         this.statusLabel = config.statusLabel;
         this.historyContainer = config.historyContainer || null;
 
-        // UI: si autoFace está "activo" (para que liveImageJpeg no pise el status)
-        this.autoFaceUIActive = false;
-        this.autoFaceLastStatus = null;
-
         // ============================================================
         // ESTADO INTERNO
         // ============================================================
@@ -75,6 +85,23 @@ class TD100Client {
         this._previewRequestId = null;
         this._previewMode = null; // "face" | "iris"
         this._previewEye = null;  // solo aplica a "iris": "both" | "right" | "left"
+
+        // ============================================================
+        // AUTO FACE (simulado en cliente -- ver nota al inicio del archivo)
+        // ============================================================
+        this.autoFaceUIActive = false;
+        this._autoFaceCapturing = false;
+        this._autoFaceAttempt = 0;
+        this._autoFaceMaxAttempts = 15;
+        this._autoFaceStableCount = 0;
+        this._autoFacePrevFrame = null;
+        this._autoFaceStableThreshold = 6;       // diferencia media de luminancia (0-255) por debajo de esto cuenta como "quieto"
+        this._autoFaceRequiredStableFrames = 5;  // frames seguidos "quietos" antes de disparar la captura
+        this._autoFaceSessionTimer = null;
+        this._autoFaceSessionTimeoutMs = 60000;  // si nunca se estabiliza, se cancela con error
+        this._autoFaceCanvas = document.createElement("canvas");
+        this._autoFaceCanvas.width = 48;
+        this._autoFaceCanvas.height = 36;
 
         // ============================================================
         // AUTO RECOVERY / CONEXIÓN
@@ -307,6 +334,7 @@ class TD100Client {
         this.lastLiveTs = 0;
         this._previewRequestId = null;
         this._previewMode = null;
+        this._resetAutoFaceState();
 
         this.resetLive();
         this.setStatus("WS desconectado", "secondary");
@@ -345,6 +373,7 @@ class TD100Client {
         this.lastLiveTs = 0;
         this._previewRequestId = null;
         this._previewMode = null;
+        this._resetAutoFaceState();
 
         this.resetLive();
 
@@ -485,26 +514,38 @@ class TD100Client {
 
             case "camera.preview.frame":
                 this.lastLiveTs = Date.now();
+
+                if (this.autoFaceUIActive) {
+                    this._autoFaceCheckFrame(msg.base64);
+                    break;
+                }
+
                 if (this.liveImg) this.liveImg.src = "data:image/jpeg;base64," + msg.base64;
 
-                if (!this.autoFaceUIActive && this.cameraConnected &&
+                if (this.cameraConnected &&
                     this.statusLabel && this.statusLabel.textContent === "Live detenido") {
                     this.setStatus("Cámara conectada", "success");
                 }
                 break;
 
             case "capture.result":
-                this._handleCaptureResult(msg);
+                if (this.autoFaceUIActive || this._autoFaceCapturing) {
+                    this._handleAutoFaceCaptureResult(msg);
+                } else {
+                    this._handleCaptureResult(msg);
+                }
                 break;
 
             case "error":
+                if (this.autoFaceUIActive || this._autoFaceCapturing) {
+                    this._autoFaceRetryOrFail();
+                    break;
+                }
                 this.clearCapturePending();
                 this.expectManualFace = false;
                 this.clearBusy();
                 this._stopPreview();
-                if (!this.autoFaceUIActive) {
-                    this.setStatus(msg.message || "Error de captura", "danger");
-                }
+                this.setStatus(msg.message || "Error de captura", "danger");
                 break;
         }
     }
@@ -521,7 +562,11 @@ class TD100Client {
             this.cameraConnected = false;
             this.lastLiveTs = 0;
             this.resetLive();
-            this.setStatus("Cámara desconectada", "warning");
+            if (this.autoFaceUIActive) {
+                this._cancelAutoFace("Cámara desconectada", "warning");
+            } else {
+                this.setStatus("Cámara desconectada", "warning");
+            }
         }
     }
 
@@ -609,6 +654,7 @@ class TD100Client {
         // WSS-DEVICES no expone "desconectar solo la cámara" para un cliente -- el puente
         // administra el ciclo de vida del dispositivo por su cuenta. Esto solo refleja el
         // estado en la UI local.
+        this._resetAutoFaceState();
         this._stopPreview();
         this.cameraConnected = false;
         this.resetLive();
@@ -633,7 +679,7 @@ class TD100Client {
     }
 
     captureFace() {
-        if (this.isBusy) return;
+        if (this.isBusy || this.autoFaceUIActive) return;
 
         this.expectManualFace = true;
         if (this.manualFaceTimer) clearTimeout(this.manualFaceTimer);
@@ -650,16 +696,134 @@ class TD100Client {
         this.send({ type: "camera.capture", requestId: this._previewRequestId, capture: "face" });
     }
 
-    // Sin equivalente en WSS-DEVICES hoy (no hay detección automática de rostro en el
-    // servidor) -- no-op seguro: evita dejar la UI mostrando "AutoFace iniciando..." para
-    // siempre sin que llegue jamás un evento que lo resuelva.
+    // Simulado en el cliente -- ver nota al inicio del archivo. WSS-DEVICES no tiene detección
+    // automática de rostro en el servidor, así que aquí se abre vista previa continua y se
+    // detecta "quietud" frame a frame para disparar la captura real.
     autoFace(enable) {
+        if (!enable) {
+            if (this.autoFaceUIActive) this._cancelAutoFace("AutoFace cancelado", "secondary");
+            return;
+        }
+
+        if (this.isBusy || this.autoFaceUIActive) return;
+
+        this.autoFaceUIActive = true;
+        this._autoFaceCapturing = false;
+        this._autoFaceAttempt = 0;
+        this._autoFaceStableCount = 0;
+        this._autoFacePrevFrame = null;
+
+        if (this._autoFaceSessionTimer) clearTimeout(this._autoFaceSessionTimer);
+        this._autoFaceSessionTimer = setTimeout(() => {
+            if (this.autoFaceUIActive) {
+                this._cancelAutoFace("AutoFace: tiempo agotado, intenta de nuevo.", "warning");
+            }
+        }, this._autoFaceSessionTimeoutMs);
+
+        this.setStatus(`AutoFace operando (0/${this._autoFaceMaxAttempts})`, "info");
+        this._startPreview("face");
+    }
+
+    // Downscale a un canvas oculto (48x36) + diferencia media de luminancia contra el frame
+    // anterior. Por debajo del umbral varios frames seguidos = "la persona está quieta" ->
+    // dispara una captura real. Ver nota de calibración al inicio del archivo.
+    _autoFaceCheckFrame(base64) {
+        if (this.autoFaceImg) this.autoFaceImg.src = "data:image/jpeg;base64," + base64;
+        if (this._autoFaceCapturing) return; // ya se disparó una captura, esperando resultado
+
+        const img = new Image();
+        img.onload = () => {
+            if (!this.autoFaceUIActive || this._autoFaceCapturing) return; // canceló/disparó mientras decodificaba
+
+            const ctx = this._autoFaceCanvas.getContext("2d");
+            const w = this._autoFaceCanvas.width, h = this._autoFaceCanvas.height;
+            ctx.drawImage(img, 0, 0, w, h);
+            const frame = ctx.getImageData(0, 0, w, h).data;
+
+            if (this._autoFacePrevFrame) {
+                let diff = 0;
+                for (let i = 0; i < frame.length; i += 4) {
+                    diff += Math.abs(frame[i] - this._autoFacePrevFrame[i]);
+                }
+                const avgDiff = diff / (frame.length / 4);
+
+                if (avgDiff < this._autoFaceStableThreshold) {
+                    this._autoFaceStableCount++;
+                } else {
+                    this._autoFaceStableCount = 0;
+                }
+
+                if (this._autoFaceStableCount >= this._autoFaceRequiredStableFrames) {
+                    this._autoFaceTriggerCapture();
+                }
+            }
+
+            this._autoFacePrevFrame = frame;
+        };
+        img.src = "data:image/jpeg;base64," + base64;
+    }
+
+    _autoFaceTriggerCapture() {
+        if (!this._previewRequestId) return; // la sesión de preview ya no está activa
+
+        this._autoFaceCapturing = true;
+        this._autoFaceAttempt++;
+        this.setStatus(`AutoFace capturando (${this._autoFaceAttempt}/${this._autoFaceMaxAttempts})`, "primary");
+        this.send({ type: "camera.capture", requestId: this._previewRequestId, capture: "face" });
+    }
+
+    _handleAutoFaceCaptureResult(msg) {
+        const faceImage = (msg.images || []).find(img => img.label === "face");
+        if (!faceImage) {
+            this._autoFaceRetryOrFail();
+            return;
+        }
+
+        if (this.autoFaceImg) this.autoFaceImg.src = "data:image/jpeg;base64," + faceImage.base64;
+        this.addHistory("Auto rostro", faceImage.base64);
+
+        if (this._autoFaceSessionTimer) { clearTimeout(this._autoFaceSessionTimer); this._autoFaceSessionTimer = null; }
         this.autoFaceUIActive = false;
-        this.setStatus("AutoFace no disponible en este puente.", "warning");
+        this._autoFaceCapturing = false;
+        this._stopPreview();
+        this.setStatus(`AutoFace OK (${this._autoFaceAttempt}/${this._autoFaceMaxAttempts})`, "success");
+    }
+
+    // La captura disparada por estabilidad falló (p.ej. dispositivo ocupado/error de lectura) --
+    // reintenta desde cero la detección de estabilidad sobre la misma sesión de preview, hasta
+    // agotar los intentos.
+    _autoFaceRetryOrFail() {
+        if (!this.autoFaceUIActive) return; // ya se había cancelado
+
+        this._autoFaceCapturing = false;
+        this._autoFaceStableCount = 0;
+        this._autoFacePrevFrame = null;
+
+        if (this._autoFaceAttempt >= this._autoFaceMaxAttempts) {
+            this._cancelAutoFace("AutoFace error: límite de intentos alcanzado", "danger");
+            return;
+        }
+
+        this.setStatus(`AutoFace operando (${this._autoFaceAttempt}/${this._autoFaceMaxAttempts})`, "info");
+    }
+
+    _cancelAutoFace(statusText, color) {
+        if (this._autoFaceSessionTimer) { clearTimeout(this._autoFaceSessionTimer); this._autoFaceSessionTimer = null; }
+        this._resetAutoFaceState();
+        this._stopPreview();
+        this.setStatus(statusText, color);
+    }
+
+    _resetAutoFaceState() {
+        if (this._autoFaceSessionTimer) { clearTimeout(this._autoFaceSessionTimer); this._autoFaceSessionTimer = null; }
+        this.autoFaceUIActive = false;
+        this._autoFaceCapturing = false;
+        this._autoFaceStableCount = 0;
+        this._autoFacePrevFrame = null;
     }
 
     captureIris(mode = "both") {
-        if (this.isBusy) return;
+        if (this.isBusy || this.autoFaceUIActive) return;
 
         this.markBusy(this.captureTimeoutMs + 1500);
         this.startCapturePending("iris", this.captureTimeoutMs);
@@ -687,6 +851,7 @@ class TD100Client {
         this.lastLiveTs = 0;
         this._previewRequestId = null;
         this._previewMode = null;
+        this._resetAutoFaceState();
 
         this.resetLive();
         this.recoverAttempts = 0;
