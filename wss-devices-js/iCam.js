@@ -176,6 +176,24 @@ class TD100Client {
             this.startAutoRecovery();
         }
 
+        // ============================================================
+        // PAUSA POR PESTAÑA OCULTA -- con vista previa continua, si el operador cambia a otra
+        // ventana/pestaña sin cerrar esta página, la cámara se quedaría tomada indefinidamente
+        // sin que nadie la esté viendo. Al ocultarse se detiene la vista previa (y se cancela
+        // AutoFace si estaba corriendo); al volver a ser visible se retoma sola.
+        // ============================================================
+
+        document.addEventListener("visibilitychange", () => {
+            if (document.hidden) {
+                if (this.autoFaceUIActive) {
+                    this._resetAutoFaceState();
+                    this.setStatus("AutoFace pausado (pestaña no visible)", "secondary");
+                }
+                this._stopPreview();
+            } else if (this.cameraConnected) {
+                this._resumeIdlePreview();
+            }
+        });
 
         // ============================================================
         // WATCHDOG PRINCIPAL
