@@ -564,7 +564,6 @@ class TD100Client {
     }
 
     _applyCameraStatus(status) {
-        console.log("[iCam][DIAG] _applyCameraStatus recibido:", JSON.stringify(status), "cameraConnected actual:", this.cameraConnected);
 
         // "Busy" es el estado normal mientras hay una vista previa/captura activa (el propio
         // SDK lo reporta así apenas se abre camera.preview.start) -- con vista previa continua
@@ -581,7 +580,6 @@ class TD100Client {
             this.setStatus("Cámara conectada", "success");
             this._resumeIdlePreview();
         } else if (!connected && this.cameraConnected) {
-            console.warn("[iCam][DIAG] _applyCameraStatus: pasando a desconectada por status=", JSON.stringify(status));
             this.cameraConnected = false;
             this.lastLiveTs = 0;
             this._stopPreview();
@@ -683,7 +681,6 @@ class TD100Client {
     }
 
     disconnectCamera() {
-        console.trace("[iCam][DIAG] disconnectCamera() llamado -- quién lo invocó:");
         // WSS-DEVICES no expone "desconectar solo la cámara" para un cliente -- el puente
         // administra el ciclo de vida del dispositivo por su cuenta. Esto solo refleja el
         // estado en la UI local.
@@ -779,6 +776,7 @@ class TD100Client {
                     diff += Math.abs(frame[i] - this._autoFacePrevFrame[i]);
                 }
                 const avgDiff = diff / (frame.length / 4);
+                console.log("[iCam][DIAG] autoFace avgDiff:", avgDiff.toFixed(2), "stableCount:", this._autoFaceStableCount, "umbral:", this._autoFaceStableThreshold);
 
                 if (avgDiff < this._autoFaceStableThreshold) {
                     this._autoFaceStableCount++;
