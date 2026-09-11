@@ -177,23 +177,30 @@ class TD100Client {
         }
 
         // ============================================================
-        // PAUSA POR PESTAÑA OCULTA -- con vista previa continua, si el operador cambia a otra
-        // ventana/pestaña sin cerrar esta página, la cámara se quedaría tomada indefinidamente
-        // sin que nadie la esté viendo. Al ocultarse se detiene la vista previa (y se cancela
-        // AutoFace si estaba corriendo); al volver a ser visible se retoma sola.
+        // PAUSA POR PESTAÑA/VENTANA NO ACTIVA -- con vista previa continua, si el operador
+        // cambia a otra pestaña, minimiza, o alterna a OTRA VENTANA/APLICACIÓN sin cerrar esta
+        // página, la cámara se quedaría tomada indefinidamente sin que nadie la esté viendo.
+        // "visibilitychange" cubre pestaña oculta/minimizado; "blur"/"focus" cubren perder el
+        // foco de la ventana hacia otra app sin minimizar (visibilitychange no dispara en ese
+        // caso). Al quedar oculta o sin foco se detiene la vista previa (y se cancela AutoFace
+        // si estaba corriendo); al recuperar visibilidad y foco se retoma sola.
         // ============================================================
 
-        document.addEventListener("visibilitychange", () => {
-            if (document.hidden) {
+        const evaluateWindowActive = () => {
+            const inactive = document.hidden || !document.hasFocus();
+            if (inactive) {
                 if (this.autoFaceUIActive) {
                     this._resetAutoFaceState();
-                    this.setStatus("AutoFace pausado (pestaña no visible)", "secondary");
+                    this.setStatus("AutoFace pausado (ventana no activa)", "secondary");
                 }
                 this._stopPreview();
             } else if (this.cameraConnected) {
                 this._resumeIdlePreview();
             }
-        });
+        };
+        document.addEventListener("visibilitychange", evaluateWindowActive);
+        window.addEventListener("blur", evaluateWindowActive);
+        window.addEventListener("focus", evaluateWindowActive);
 
         // ============================================================
         // WATCHDOG PRINCIPAL
