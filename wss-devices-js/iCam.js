@@ -182,20 +182,39 @@ class TD100Client {
         // página, la cámara se quedaría tomada indefinidamente sin que nadie la esté viendo.
         // "visibilitychange" cubre pestaña oculta/minimizado; "blur"/"focus" cubren perder el
         // foco de la ventana hacia otra app sin minimizar (visibilitychange no dispara en ese
-        // caso). Al quedar oculta o sin foco se detiene la vista previa (y se cancela AutoFace
-        // si estaba corriendo); al recuperar visibilidad y foco se retoma sola.
+        // caso).
+        //
+        // La pausa real se retrasa _windowInactiveDebounceMs (2.5s): este hardware ya demostró
+        // ser delicado con StartLive/StopLive/StartCapture seguidos (ver IrisImageCaptureFail,
+        // StopLiveSettleDelay en Td200CameraModule.cs) -- sin este margen, un cambio de ventana
+        // rápido o accidental dispara un ciclo completo de apagado/encendido de la cámara en
+        // cada parpadeo de foco, lo que en una prueba real dejó el dispositivo tan atascado que
+        // hubo que reiniciar el servicio desde la barra de tareas. Si el foco vuelve antes de
+        // que venza el temporizador, se cancela y no se llega a detener nada.
         // ============================================================
+
+        this._windowInactiveTimer = null;
+        this._windowInactiveDebounceMs = 2500;
 
         const evaluateWindowActive = () => {
             const inactive = document.hidden || !document.hasFocus();
+
             if (inactive) {
-                if (this.autoFaceUIActive) {
-                    this._resetAutoFaceState();
-                    this.setStatus("AutoFace pausado (ventana no activa)", "secondary");
+                if (this._windowInactiveTimer) return; // ya hay una pausa programada
+                this._windowInactiveTimer = setTimeout(() => {
+                    this._windowInactiveTimer = null;
+                    if (this.autoFaceUIActive) {
+                        this._resetAutoFaceState();
+                        this.setStatus("AutoFace pausado (ventana no activa)", "secondary");
+                    }
+                    this._stopPreview();
+                }, this._windowInactiveDebounceMs);
+            } else {
+                if (this._windowInactiveTimer) {
+                    clearTimeout(this._windowInactiveTimer);
+                    this._windowInactiveTimer = null;
                 }
-                this._stopPreview();
-            } else if (this.cameraConnected) {
-                this._resumeIdlePreview();
+                if (this.cameraConnected) this._resumeIdlePreview();
             }
         };
         document.addEventListener("visibilitychange", evaluateWindowActive);
@@ -623,22 +642,23 @@ class TD100Client {
     _handleCaptureResult(msg) {
         const images = msg.images || [];
         images.forEach((img) => {
+            const dataUri = "data:" + this._mimeForFormat(img.format) + ";base64," + img.base64;
             switch (img.label) {
                 case "face":
                     if (this.expectManualFace) {
-                        this.faceImg.src = "data:image/jpeg;base64," + img.base64;
-                        this.addHistory("Rostro manual", img.base64);
+                        this.faceImg.src = dataUri;
+                        this.addHistory("Rostro manual", img.base64, img.format);
                         this.expectManualFace = false;
                         if (this.manualFaceTimer) clearTimeout(this.manualFaceTimer);
                     }
                     break;
                 case "right_iris":
-                    this.irisRightImg.src = "data:image/jpeg;base64," + img.base64;
-                    this.addHistory("Iris derecho", img.base64);
+                    this.irisRightImg.src = dataUri;
+                    this.addHistory("Iris derecho", img.base64, img.format);
                     break;
                 case "left_iris":
-                    this.irisLeftImg.src = "data:image/jpeg;base64," + img.base64;
-                    this.addHistory("Iris izquierdo", img.base64);
+                    this.irisLeftImg.src = dataUri;
+                    this.addHistory("Iris izquierdo", img.base64, img.format);
                     break;
             }
         });
@@ -835,8 +855,8 @@ class TD100Client {
             return;
         }
 
-        if (this.autoFaceImg) this.autoFaceImg.src = "data:image/jpeg;base64," + faceImage.base64;
-        this.addHistory("Auto rostro", faceImage.base64);
+        if (this.autoFaceImg) this.autoFaceImg.src = "data:" + this._mimeForFormat(faceImage.format) + ";base64," + faceImage.base64;
+        this.addHistory("Auto rostro", faceImage.base64, faceImage.format);
 
         if (this._autoFaceSessionTimer) { clearTimeout(this._autoFaceSessionTimer); this._autoFaceSessionTimer = null; }
         this.autoFaceUIActive = false;
@@ -924,7 +944,7 @@ class TD100Client {
     // 🖼 HISTORIAL
     // ============================================================
 
-    addHistory(label, base64) {
+    addHistory(label, base64, format) {
         if (!this.historyContainer) return;
 
         const now = new Date().toLocaleTimeString();
@@ -934,9 +954,25 @@ class TD100Client {
         div.innerHTML = `
             <div class="capture-item-title">${label}</div>
             <div class="capture-item-time">${now}</div>
-            <img src="data:image/jpeg;base64,${base64}">
+            <img src="data:${this._mimeForFormat(format)};base64,${base64}">
         `;
 
         this.historyContainer.prepend(div);
+    }
+
+    // El puente devuelve las capturas finales (rostro/iris) en el formato configurado en
+    // config.env (CAM_FACE_FORMAT/CAM_IRIS_FORMAT, default "png") -- no siempre jpeg. Los frames
+    // de vista previa sí son siempre jpeg (el propio servidor los codifica así), así que esto
+    // solo aplica a imágenes de capture.result, no a camera.preview.frame.
+    _mimeForFormat(format) {
+        switch ((format || "png").toLowerCase()) {
+            case "jpg":
+            case "jpeg":
+                return "image/jpeg";
+            case "bmp":
+                return "image/bmp";
+            default:
+                return "image/png";
+        }
     }
 }
