@@ -54,8 +54,15 @@ class TD100Client {
         this.wsUrl = config.wsUrl;
 
         // Modo de la vista previa continua que se abre en cuanto la cámara conecta -- ver nota
-        // de "Vista previa continua" al inicio del archivo.
-        this.previewMode = config.previewMode || "face";
+        // de "Vista previa continua" al inicio del archivo. Si la página no dice explícitamente
+        // config.previewMode, se infiere de qué imágenes configuró: sin faceImg pero con
+        // irisRightImg/irisLeftImg -> es una página de iris (internoiris.php), no arrancar en
+        // modo rostro para luego tener que cambiar a iris justo antes de la primera captura
+        // (ese cambio de modo, encima del ya delicado apagado/reencendido de streaming del
+        // hardware -- ver StopLiveSettleDelay en Td200CameraModule.cs -- puede producir
+        // IrisImageCaptureFail).
+        this.previewMode = config.previewMode ||
+            (!config.faceImg && (config.irisRightImg || config.irisLeftImg) ? "iris" : "face");
         this.previewEye = config.previewEye || "both";
 
         // IMGs
