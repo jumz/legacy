@@ -177,27 +177,29 @@ class TD100Client {
         }
 
         // ============================================================
-        // PAUSA POR PESTAÑA/VENTANA NO ACTIVA -- con vista previa continua, si el operador
-        // cambia a otra pestaña, minimiza, o alterna a OTRA VENTANA/APLICACIÓN sin cerrar esta
-        // página, la cámara se quedaría tomada indefinidamente sin que nadie la esté viendo.
-        // "visibilitychange" cubre pestaña oculta/minimizado; "blur"/"focus" cubren perder el
-        // foco de la ventana hacia otra app sin minimizar (visibilitychange no dispara en ese
-        // caso).
+        // PAUSA POR PESTAÑA OCULTA -- con vista previa continua, si el operador cambia a otra
+        // pestaña o minimiza sin cerrar esta página, la cámara se quedaría tomada indefinidamente
+        // sin que nadie la esté viendo.
         //
-        // La pausa real se retrasa _windowInactiveDebounceMs (2.5s): este hardware ya demostró
-        // ser delicado con StartLive/StopLive/StartCapture seguidos (ver IrisImageCaptureFail,
-        // StopLiveSettleDelay en Td200CameraModule.cs) -- sin este margen, un cambio de ventana
-        // rápido o accidental dispara un ciclo completo de apagado/encendido de la cámara en
-        // cada parpadeo de foco, lo que en una prueba real dejó el dispositivo tan atascado que
-        // hubo que reiniciar el servicio desde la barra de tareas. Si el foco vuelve antes de
-        // que venza el temporizador, se cancela y no se llega a detener nada.
+        // Deliberadamente NO se usa "blur"/"focus" de window (perder el foco hacia otra
+        // ventana/app sin cambiar de pestaña ni minimizar): en la práctica eso dispara la pausa
+        // con demasiada frecuencia -- incluso abrir DevTools para depurar cuenta como perder el
+        // foco -- y cada pausa/reanudación es un ciclo completo de StartLive/StopLive/
+        // StartCapture en el hardware. Confirmado en hardware (2026-09-11): ese ciclo repetido
+        // en sucesión rápida produjo IrisImageCaptureFail. "visibilitychange" es un evento mucho
+        // menos frecuente y más deliberado (cambiar de pestaña o minimizar de verdad), así que
+        // se queda como única señal de "nadie está viendo esto".
+        //
+        // La pausa real se retrasa _windowInactiveDebounceMs (2.5s) por la misma razón -- si la
+        // pestaña vuelve a ser visible antes de que venza el temporizador, se cancela y no se
+        // llega a detener nada.
         // ============================================================
 
         this._windowInactiveTimer = null;
         this._windowInactiveDebounceMs = 2500;
 
         const evaluateWindowActive = () => {
-            const inactive = document.hidden || !document.hasFocus();
+            const inactive = document.hidden;
 
             if (inactive) {
                 if (this._windowInactiveTimer) return; // ya hay una pausa programada
@@ -218,8 +220,6 @@ class TD100Client {
             }
         };
         document.addEventListener("visibilitychange", evaluateWindowActive);
-        window.addEventListener("blur", evaluateWindowActive);
-        window.addEventListener("focus", evaluateWindowActive);
 
         // ============================================================
         // WATCHDOG PRINCIPAL
