@@ -586,6 +586,8 @@ class TD100Client {
                 break;
 
             case "capture.result":
+                console.log("[iCam][DIAG] capture.result recibido:", msg.requestId,
+                    (msg.images || []).map(i => ({ label: i.label, format: i.format, base64Len: (i.base64 || "").length })));
                 if (this.autoFaceUIActive || this._autoFaceCapturing) {
                     this._handleAutoFaceCaptureResult(msg);
                 } else {
@@ -594,6 +596,7 @@ class TD100Client {
                 break;
 
             case "error":
+                console.log("[iCam][DIAG] error recibido:", msg.requestId, msg.code, msg.message);
                 if (this.autoFaceUIActive || this._autoFaceCapturing) {
                     this._autoFaceRetryOrFail();
                     break;
