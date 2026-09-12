@@ -555,7 +555,7 @@ class TD100Client {
 
         let msg;
         try { msg = JSON.parse(raw.trim()); }
-        catch { return; }
+        catch (ex) { console.error("[iCam] Mensaje WS no es JSON válido:", ex, raw.slice(0, 200)); return; }
 
         switch (msg.type) {
 
@@ -641,25 +641,33 @@ class TD100Client {
     // siempre llegan ambas.
     _handleCaptureResult(msg) {
         const images = msg.images || [];
+        // Cada imagen se procesa aislada: si una revienta (p.ej. porque la página no configuró
+        // el <img> correspondiente), no debe impedir que el resto se muestre NI que se llegue al
+        // clearCapturePending/_resumeIdlePreview de abajo -- sin este aislamiento, una excepción
+        // aquí dejaba la vista previa congelada para siempre (solo se arreglaba refrescando).
         images.forEach((img) => {
-            const dataUri = "data:" + this._mimeForFormat(img.format) + ";base64," + img.base64;
-            switch (img.label) {
-                case "face":
-                    if (this.expectManualFace) {
-                        this.faceImg.src = dataUri;
-                        this.addHistory("Rostro manual", img.base64, img.format);
-                        this.expectManualFace = false;
-                        if (this.manualFaceTimer) clearTimeout(this.manualFaceTimer);
-                    }
-                    break;
-                case "right_iris":
-                    this.irisRightImg.src = dataUri;
-                    this.addHistory("Iris derecho", img.base64, img.format);
-                    break;
-                case "left_iris":
-                    this.irisLeftImg.src = dataUri;
-                    this.addHistory("Iris izquierdo", img.base64, img.format);
-                    break;
+            try {
+                const dataUri = "data:" + this._mimeForFormat(img.format) + ";base64," + img.base64;
+                switch (img.label) {
+                    case "face":
+                        if (this.expectManualFace) {
+                            this.faceImg.src = dataUri;
+                            this.addHistory("Rostro manual", img.base64, img.format);
+                            this.expectManualFace = false;
+                            if (this.manualFaceTimer) clearTimeout(this.manualFaceTimer);
+                        }
+                        break;
+                    case "right_iris":
+                        this.irisRightImg.src = dataUri;
+                        this.addHistory("Iris derecho", img.base64, img.format);
+                        break;
+                    case "left_iris":
+                        this.irisLeftImg.src = dataUri;
+                        this.addHistory("Iris izquierdo", img.base64, img.format);
+                        break;
+                }
+            } catch (ex) {
+                console.error("[iCam] Error mostrando imagen de captura:", img.label, ex);
             }
         });
 
@@ -855,8 +863,12 @@ class TD100Client {
             return;
         }
 
-        if (this.autoFaceImg) this.autoFaceImg.src = "data:" + this._mimeForFormat(faceImage.format) + ";base64," + faceImage.base64;
-        this.addHistory("Auto rostro", faceImage.base64, faceImage.format);
+        try {
+            if (this.autoFaceImg) this.autoFaceImg.src = "data:" + this._mimeForFormat(faceImage.format) + ";base64," + faceImage.base64;
+            this.addHistory("Auto rostro", faceImage.base64, faceImage.format);
+        } catch (ex) {
+            console.error("[iCam] Error mostrando imagen de AutoFace:", ex);
+        }
 
         if (this._autoFaceSessionTimer) { clearTimeout(this._autoFaceSessionTimer); this._autoFaceSessionTimer = null; }
         this.autoFaceUIActive = false;
