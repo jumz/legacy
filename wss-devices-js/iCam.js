@@ -21,9 +21,17 @@
  * durante una captura. captureFace()/autoFace() reutilizan esa misma sesión (mismo modo) sin
  * abrir una nueva; al terminar una captura (éxito, error o cancelación) se retoma la vista
  * previa en vez de cerrarla. Esto mantiene el candado de cámara tomado todo el tiempo que la
- * página esté abierta -- aceptable porque solo una estación usa la cámara a la vez. Si una
- * página necesita vista previa de iris en vez de rostro, pasar `config.previewMode = "iris"`
- * (y opcionalmente `config.previewEye`, default "both").
+ * página esté abierta -- aceptable porque solo una estación usa la cámara a la vez.
+ *
+ * EXCEPCIÓN -- iris NO usa vista previa continua (confirmado en hardware, 2026-09-11): el modo
+ * "Enroll" de iris auto-captura por sí solo apenas queda armado (el `StartCapture` que abre la
+ * vista previa YA arma la detección automática de ambos ojos, sin necesidad de `PressButton()`).
+ * Dejarlo abierto de fondo hace que el hardware capture "fantasma" en cuanto detecta los ojos,
+ * sin que el software lo haya pedido -- el resultado se descarta en silencio (no hay captura
+ * pendiente registrada) y el hardware queda en mal estado para el siguiente intento manual
+ * (`IrisImageCaptureFail`). Por eso, cuando `config.previewMode === "iris"`, la vista previa
+ * solo se abre justo antes de una captura real (`captureIris`) y se cierra siempre al terminar
+ * -- igual que el comportamiento original antes de esta vista previa continua.
  *
  * setLed/sleep/wakeup/toggleSleep/captureScene: sin equivalente en WSS-DEVICES hoy (decisión ya
  * tomada, ver plan) -- quedan como no-op seguro (no truenan, actualizan el status a un mensaje
@@ -721,8 +729,20 @@ class TD100Client {
     // captura (éxito, error o cancelación) -- en vez de dejar la vista en blanco, ver nota de
     // "Vista previa continua" al inicio del archivo.
     _resumeIdlePreview() {
+        // El modo Enroll de iris auto-captura por sí solo con solo estar armado (StartLive ya
+        // hace StartCapture) -- confirmado en hardware (2026-09-11): dejarlo abierto fuera de
+        // una captura activa hace que el hardware capture "fantasma" en cuanto detecta ambos
+        // ojos, sin que el software lo haya pedido (el puente no tiene una captura pendiente
+        // registrada en ese momento y descarta el resultado en silencio), dejando el hardware en
+        // mal estado para el siguiente intento manual (IrisImageCaptureFail). Por eso iris NUNCA
+        // se deja como vista previa "de fondo" -- solo se abre justo antes de una captura real
+        // (ver captureIris) y se cierra siempre aquí, sin excepción.
+        if (this.previewMode === "iris") {
+            this._stopPreview();
+            return;
+        }
         if (!this.cameraConnected) return;
-        this._startPreview(this.previewMode, this.previewMode === "iris" ? this.previewEye : undefined);
+        this._startPreview(this.previewMode);
     }
 
     // ============================================================
