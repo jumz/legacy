@@ -154,6 +154,17 @@
   // funciones sin equivalente real, en vez de inventar un código nuevo.
   const SCORE_NOT_AVAILABLE = 255;
 
+  // AutocaptureStatus (FingerprintCaptureApi.AutocaptureStatus, aw_fingerprint_capture.js:57-182)
+  // -- ES UN ENUM NUMÉRICO, no strings ("capturing"/"completed"/"failed" -- versión anterior de
+  // este adaptador los inventó y producía "Estado: undefined" en pantalla, confirmado
+  // 2026-09-14, porque internohuellas.js hace `AutocaptureStatus[status]`, una búsqueda inversa
+  // numero->texto). Valores confirmados leyendo ese enum completo:
+  const AUTOCAPTURE_STATUS_CAPTURING = 30102; // SOFTWAREAUTOCAPTURE_CAPTURE_INITIATED
+  const AUTOCAPTURE_STATUS_COMPLETED = 20103; // CAPTURE_COMPLETED
+  const AUTOCAPTURE_STATUS_ABORTED = 20102; // CAPTURE_ABORTED -- no hay un código más específico
+  // de "por qué" falló (los que sí existen son sobre calidad/posición de dedo, que este puente
+  // no distingue) -- usar el genérico en vez de fabricar una razón que no se puede confirmar.
+
   // Funciones propietarias de Aware sin equivalente real en RealScan/RS_SDK -- responden error
   // explícito "no disponible" en vez de un valor inventado.
   const UNSUPPORTED_FUNCTIONS = new Set([
@@ -326,7 +337,7 @@
         return;
       }
       const hand = info.kind === "slap" ? info.hand : info.kind === "single_rolled" ? "single_rolled" : "single";
-      ctx.pushEvent(channel, "aw_fingerprint_capture_autocapture_status_updated", ["capturing"]);
+      ctx.pushEvent(channel, "aw_fingerprint_capture_autocapture_status_updated", [AUTOCAPTURE_STATUS_CAPTURING]);
       ctx
         .captureReal(hand)
         .then((images) => {
@@ -334,11 +345,11 @@
           images.forEach((img) => cache.set(img.label, { base64: img.base64, format: img.format || "png", nistQuality: img.nistQuality }));
           ctx.captureCache.set(channel, cache);
           ctx.pushEvent(channel, "aw_fingerprint_capture_captured_image_updated", [impression]);
-          ctx.pushEvent(channel, "aw_fingerprint_capture_autocapture_status_updated", ["completed"]);
+          ctx.pushEvent(channel, "aw_fingerprint_capture_autocapture_status_updated", [AUTOCAPTURE_STATUS_COMPLETED]);
           reply(null, 0, "");
         })
         .catch((err) => {
-          ctx.pushEvent(channel, "aw_fingerprint_capture_autocapture_status_updated", ["failed"]);
+          ctx.pushEvent(channel, "aw_fingerprint_capture_autocapture_status_updated", [AUTOCAPTURE_STATUS_ABORTED]);
           reply(null, -1, err && err.message ? err.message : "Error de captura");
         });
     },
