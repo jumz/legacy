@@ -49,6 +49,49 @@
 (function () {
   "use strict";
 
+  // ---- Parche defensivo de window.WebSocket -- confirmado en hardware/producción
+  // (2026-09-14): el navegador (o algo intermedio -- no CDN, no nginx con proxy_cache, un solo
+  // servidor por DNS -- nunca identificado con certeza) sirve copias VIEJAS de los wiring
+  // scripts de cada página (internohuellas.js y hermanos) incluso con recarga forzada e
+  // incógnita nueva, mientras que este mismo archivo (cargado con ?v=... para forzar
+  // frescura) sí llega actualizado. Esas copias viejas traen hardcodeado el puerto del backend
+  // nativo de Aware (2080, el transporte real) y un segundo socket a un servicio "AdminAware"
+  // (2012, solo para apagar/reencender la app nativa antes de usar la versión web -- no aplica
+  // con WSS-DEVICES) cuyo fallo muestra un diálogo de error confuso al usuario.
+  //
+  // Como este archivo SÍ llega fresco y se ejecuta ANTES que esos wiring scripts (script tag
+  // síncrono, antes de DOMContentLoaded), parcha aquí el constructor global para que, sin
+  // importar qué versión de esos scripts esté corriendo: (a) cualquier intento de conectar al
+  // 2080 se redirija al puerto real de WSS-DEVICES, y (b) cualquier intento de conectar al 2012
+  // se neutralice en silencio (un socket que nunca abre ni falla) en vez de mostrar el error.
+  const WSS_DEVICES_PORT = 23123;
+  const NativeWebSocket = window.WebSocket;
+
+  function createNoopSocket() {
+    // No dispara open/close/message/error jamás -- el código viejo que espera una respuesta de
+    // "AdminAware" simplemente se queda esperando para siempre, sin mostrar ningún diálogo.
+    return { readyState: 0, send: function () {}, close: function () {}, onopen: null, onmessage: null, onerror: null, onclose: null };
+  }
+
+  function PatchedWebSocket(url, protocols) {
+    if (/:2080\/?$/.test(url)) {
+      const fixedUrl = url.replace(/:2080\/?$/, ":" + WSS_DEVICES_PORT);
+      console.warn("[WebsocketTransport] Redirigiendo WebSocket de puerto 2080 (Aware) a " + WSS_DEVICES_PORT + " (WSS-DEVICES):", url, "->", fixedUrl);
+      return protocols !== undefined ? new NativeWebSocket(fixedUrl, protocols) : new NativeWebSocket(fixedUrl);
+    }
+    if (/:2012\/?$/.test(url)) {
+      console.warn("[WebsocketTransport] Ignorando conexión a AdminAware (puerto 2012) -- no aplica con WSS-DEVICES:", url);
+      return createNoopSocket();
+    }
+    return protocols !== undefined ? new NativeWebSocket(url, protocols) : new NativeWebSocket(url);
+  }
+  PatchedWebSocket.prototype = NativeWebSocket.prototype;
+  PatchedWebSocket.CONNECTING = NativeWebSocket.CONNECTING;
+  PatchedWebSocket.OPEN = NativeWebSocket.OPEN;
+  PatchedWebSocket.CLOSING = NativeWebSocket.CLOSING;
+  PatchedWebSocket.CLOSED = NativeWebSocket.CLOSED;
+  window.WebSocket = PatchedWebSocket;
+
   // ---- Mapeo de Impression (FingerprintCaptureApi.Impression, aw_fingerprint_capture.js:256-431)
   // a lo que BiometricBridge.App entiende. Valores confirmados leyendo ese enum completo, no
   // inferidos. "kind" distingue:
