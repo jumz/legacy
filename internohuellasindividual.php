@@ -58,7 +58,7 @@ include(FOLDER_HTML . 'include/header.php');
 
     <section>
       <div class="contenedor_captura_huellas-botones inms-card">
-        <a class="btn btn-danger" href="dashboard.php"><i class="fa fa-times"></i> Cancelar</a>
+        <a class="btn btn-danger" href="internos.php"><i class="fa fa-times"></i> Cancelar</a>
         <button type="button" class="btn btn-info" id="btnGuardar"><i class="fa fa-check"></i> Guardar y Regresar</a>
           <?php if ($siguiente != '') { ?>
             <button type="button" class="btn btn-primary ml-1" id="btnGuardarContinuar"><i class="fa fa-chevron-circle-right"></i> Guardar y Continuar</a>
