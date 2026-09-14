@@ -156,7 +156,12 @@ class TD100Client {
         // ===============================
         this.capturePending = null;      // "face" | "iris" | "scene"
         this.captureTimer = null;
-        this.captureTimeoutMs = 2000;    // ajusta a gusto
+        // El puente puede tardar hasta ~2.5s solo en el margen de espera antes de disparar
+        // (IrisStopLiveSettleDelay 2000ms + ArmSettleDelay 500ms en Td200CameraModule.cs, para
+        // iris) más el tiempo real de captura -- con 2000ms aquí, el navegador se rendía antes
+        // de que el servidor terminara de esperar (regresión confirmada 2026-09-14, mostraba
+        // "No se recibió la imagen" en rostro/perfil aunque el servidor sí iba a responder).
+        this.captureTimeoutMs = 6000;
 
 
         // ============================================================
