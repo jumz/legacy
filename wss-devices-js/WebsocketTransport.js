@@ -12,6 +12,15 @@
  *   (aw_*.js resuelve su Promise leyendo result.return_value/result.error.code/result.error.message
  *   — confirmado en aw_biocomponent_server.js:31-45 y el mismo patrón en capture.js/set.js)
  *
+ * CONTRATO REAL (confirmado leyendo el WebsocketTransport.js original del fabricante,
+ * 2026-09-14 — el archivo anterior de este adaptador lo adivinaba mal): no es una clase que crea
+ * su propia conexión a partir de una URL. Es una función global `createWebsocketTransport`
+ * que recibe un WebSocket YA CREADO Y CONECTADO desde afuera (lo crea el wiring de cada página,
+ * ej. internohuellas.js: `websocket = new WebSocket(...); websocket.onopen = function() {
+ * var transport = createWebsocketTransport(websocket); ... }`), y devuelve `{register, send}`.
+ * Este adaptador respeta esa forma: no abre su propio WebSocket, usa el que le pasan (que el
+ * wiring debe apuntar al puerto de WSS-DEVICES, no al del backend nativo de Aware).
+ *
  * Por debajo, en vez de hablar con el servidor real de Aware, este archivo habla el protocolo
  * WebSocket de BiometricBridge.App (WSS-DEVICES) — el mismo puente que ya usa idms-shadcn — así
  * que idms_legacy captura con el mismo hardware (RealScan G10) sin que aw_fingerprint_capture.js/
@@ -20,9 +29,12 @@
  * Uso (en vez de cargar el WebsocketTransport.js original de Aware):
  *   <script src=".../wss-devices-js/WebsocketTransport.js"></script>
  *   <script>
- *     var transport = new WebsocketTransport("ws://127.0.0.1:23123"); // opcional, mismo default que biometric-capture.js
- *     var fpCapture = createFingerprintCapture(transport, "fpCaptureChannel");
- *     var fpSet = createFingerprintSet(transport, "fpSetChannel");
+ *     var ws = new WebSocket("ws://localhost:23123"); // puerto de WSS-DEVICES, no el 2080 original
+ *     ws.onopen = function () {
+ *       var transport = createWebsocketTransport(ws);
+ *       var fpCapture = createFingerprintCapture(transport, "fpCaptureChannel");
+ *       var fpSet = createFingerprintSet(transport, "fpSetChannel");
+ *     };
  *   </script>
  *
  * Alcance: cubre los 3 flujos reales de idms_legacy (internohuellas.php = slap de 10 dedos,
@@ -36,8 +48,6 @@
  */
 (function () {
   "use strict";
-
-  const DEFAULT_WS_URL = "ws://127.0.0.1:23123";
 
   // ---- Mapeo de Impression (FingerprintCaptureApi.Impression, aw_fingerprint_capture.js:256-431)
   // a lo que BiometricBridge.App entiende. Valores confirmados leyendo ese enum completo, no
@@ -118,60 +128,108 @@
     });
   }
 
-  class WebsocketTransport {
-    constructor(wsUrl) {
-      this.wsUrl = wsUrl || DEFAULT_WS_URL;
-      this._ws = null;
-      this._connected = false;
-      this._channels = new Map(); // channel -> onMessage
-      // Imagenes ya capturadas, por canal de FingerprintCapture: Map(finger label -> {base64,format,nistQuality})
-      this._captureCache = new Map();
-      // Impresiones "presentes" reportadas por FingerprintSet.setFingerprintCaptureImage, por
-      // canal de FingerprintSet: Map(impression number -> finger label)
-      this._setImpressions = new Map();
-      this._pendingByRequestId = new Map(); // requestId -> { channel, messageId, function }
-      this._connect();
+  // ---- Fábrica del transporte -- firma y valor de retorno idénticos al original del
+  // fabricante (register/send), recibiendo un WebSocket ya conectado en vez de crear el suyo. --
+
+  function createWebsocketTransport(websocketHandle) {
+    const channels = new Map(); // channel -> onMessage
+    // Imagenes ya capturadas, por canal de FingerprintCapture: Map(finger label -> {base64,format,nistQuality})
+    const captureCache = new Map();
+    // Impresiones "presentes" reportadas por FingerprintSet.setFingerprintCaptureImage, por
+    // canal de FingerprintSet: Map(impression number -> finger label)
+    const setImpressions = new Map();
+    const pendingByRequestId = new Map(); // requestId -> { resolve, reject }
+
+    function sendToBridge(message) {
+      websocketHandle.send(JSON.stringify(message));
     }
 
-    _connect() {
+    function handleBridgeMessage(event) {
+      let msg;
       try {
-        this._ws = new WebSocket(this.wsUrl);
+        msg = JSON.parse(event.data);
       } catch (err) {
-        this._ws = null;
         return;
       }
-      this._ws.onopen = () => {
-        this._connected = true;
-      };
-      this._ws.onclose = () => {
-        this._connected = false;
-        this._ws = null;
-      };
-      this._ws.onerror = () => {
-        /* onclose ya maneja el estado; sin más info util aquí */
-      };
-      this._ws.onmessage = (event) => this._handleBridgeMessage(event.data);
+
+      if (msg.type === "capture.result" && msg.device === "fingerprint") {
+        const pending = pendingByRequestId.get(msg.requestId);
+        if (!pending) return;
+        pendingByRequestId.delete(msg.requestId);
+        pending.resolve(msg.images || []);
+      } else if (msg.type === "error" && pendingByRequestId.has(msg.requestId)) {
+        const pending = pendingByRequestId.get(msg.requestId);
+        pendingByRequestId.delete(msg.requestId);
+        pending.reject(new Error(msg.message || msg.code || "Error de captura"));
+      }
+      // "device.status"/"device.list" no tienen equivalente en el protocolo de Aware que estas
+      // páginas consuman directamente -- si idms_legacy necesita mostrar estado de conexión,
+      // debe hacerlo por su cuenta (igual que hoy, vía polling de aw_fingerprint_capture_*
+      // funciones de estado, ya cubiertas por el fallback genérico de dispatch).
+    }
+    websocketHandle.onmessage = handleBridgeMessage;
+
+    // Envía fingerprint.capture al puente real y espera capture.result/error para ese requestId.
+    function captureReal(hand) {
+      return new Promise((resolve, reject) => {
+        const requestId = uuid();
+        pendingByRequestId.set(requestId, { resolve, reject });
+        sendToBridge({ type: "fingerprint.capture", requestId, hand });
+      });
     }
 
-    _send(message) {
-      if (!this._connected || !this._ws) return false;
-      this._ws.send(JSON.stringify(message));
-      return true;
+    function pushEvent(channel, fn, args) {
+      const onMessage = channels.get(channel);
+      if (!onMessage) return;
+      queueMicrotask(() => onMessage({ function: fn, message_id: null, return_value: null, args, error: { code: 0, message: "" } }));
+    }
+
+    function resolveSetFinger(channel, impression) {
+      const map = setImpressions.get(channel);
+      if (map && map.has(impression)) return map.get(impression);
+      const info = describeImpression(impression);
+      return info.finger || null;
+    }
+
+    function replyWithCachedImage(channel, finger, reply) {
+      const cache = captureCache.get(channel);
+      const entry = finger && cache ? cache.get(finger) : null;
+      if (!entry) {
+        reply(null, -1, "No hay imagen disponible para este dedo.");
+        return;
+      }
+      reply(entry.base64, 0, "");
+    }
+
+    // Contexto que ven los HANDLERS -- reemplaza al `this` de la versión anterior (basada en
+    // clase) ahora que la fábrica es una función simple, sin instancia que enlazar.
+    const ctx = { channels, captureCache, setImpressions, captureReal, pushEvent, resolveSetFinger, replyWithCachedImage };
+
+    function dispatch(fn, args, channel, reply) {
+      const handler = HANDLERS[fn];
+      if (handler) {
+        handler(ctx, args, channel, reply);
+        return;
+      }
+      // Funciones no listadas explícitamente (calibración, audio, resolución, metadatos,
+      // versión, etc.): no tienen efecto real en este puente, pero tampoco deben tronar el
+      // código de Aware -- responden éxito con un valor neutro.
+      reply(null, 0, "");
     }
 
     // ---- Interfaz que aw_biocomponent_server.js/aw_fingerprint_capture.js/aw_fingerprint_set.js
     // ya esperan de un transportObject -- ver comentario del archivo. ----
 
-    register(channel, onMessage) {
-      this._channels.set(channel, onMessage);
-      if (!this._captureCache.has(channel)) this._captureCache.set(channel, new Map());
-      if (!this._setImpressions.has(channel)) this._setImpressions.set(channel, new Map());
+    function register(channel, onMessage) {
+      channels.set(channel, onMessage);
+      if (!captureCache.has(channel)) captureCache.set(channel, new Map());
+      if (!setImpressions.has(channel)) setImpressions.set(channel, new Map());
     }
 
-    send(jsonNode) {
+    function send(jsonNode) {
       const { message_id, channel, function: fn, args } = jsonNode;
       const reply = (returnValue, errorCode, errorMessage) => {
-        const onMessage = this._channels.get(channel);
+        const onMessage = channels.get(channel);
         if (!onMessage) return;
         // aw_*.js resuelve/rechaza su Promise de forma async (Promise nativa); despachar en un
         // microtask es suficiente y evita reentradas sincrónicas raras con quien llamó send().
@@ -184,94 +242,36 @@
           });
         });
       };
-      this._dispatch(fn, args || [], channel, reply);
+      dispatch(fn, args || [], channel, reply);
     }
 
-    // ---- Despacho de funciones RPC de Aware -----------------------------------------------
-
-    _dispatch(fn, args, channel, reply) {
-      const handler = HANDLERS[fn];
-      if (handler) {
-        handler.call(this, args, channel, reply);
-        return;
-      }
-      // Funciones no listadas explícitamente (calibración, audio, resolución, metadatos,
-      // versión, etc.): no tienen efecto real en este puente, pero tampoco deben tronar el
-      // código de Aware -- responden éxito con un valor neutro.
-      reply(null, 0, "");
-    }
-
-    _pushEvent(channel, fn, args) {
-      const onMessage = this._channels.get(channel);
-      if (!onMessage) return;
-      queueMicrotask(() => onMessage({ function: fn, message_id: null, return_value: null, args, error: { code: 0, message: "" } }));
-    }
-
-    // Envía fingerprint.capture al puente real y espera capture.result/error para ese requestId.
-    _captureReal(hand) {
-      return new Promise((resolve, reject) => {
-        if (!this._connected) {
-          reject(new Error("No hay conexión con BiometricBridge.App."));
-          return;
-        }
-        const requestId = uuid();
-        this._pendingByRequestId.set(requestId, { resolve, reject });
-        this._send({ type: "fingerprint.capture", requestId, hand });
-      });
-    }
-
-    _cancelReal(requestId) {
-      this._send({ type: "capture.cancel", requestId });
-    }
-
-    _handleBridgeMessage(raw) {
-      let msg;
-      try {
-        msg = JSON.parse(raw);
-      } catch (err) {
-        return;
-      }
-
-      if (msg.type === "capture.result" && msg.device === "fingerprint") {
-        const pending = this._pendingByRequestId.get(msg.requestId);
-        if (!pending) return;
-        this._pendingByRequestId.delete(msg.requestId);
-        pending.resolve(msg.images || []);
-      } else if (msg.type === "error" && this._pendingByRequestId.has(msg.requestId)) {
-        const pending = this._pendingByRequestId.get(msg.requestId);
-        this._pendingByRequestId.delete(msg.requestId);
-        pending.reject(new Error(msg.message || msg.code || "Error de captura"));
-      }
-      // "device.status"/"device.list" no tienen equivalente en el protocolo de Aware que estas
-      // páginas consuman directamente -- si idms_legacy necesita mostrar estado de conexión,
-      // debe hacerlo por su cuenta (igual que hoy, vía polling de aw_fingerprint_capture_*
-      // funciones de estado, ya cubiertas por el fallback genérico de _dispatch).
-    }
+    return { register, send };
   }
 
   // ---- Handlers explícitos --------------------------------------------------------------
-  // this === instancia de WebsocketTransport (llamados vía handler.call(this, ...)).
+  // Cada handler recibe (ctx, args, channel, reply) -- ctx es el contexto de la instancia de
+  // transporte que lo invocó (ver createWebsocketTransport arriba).
 
   const HANDLERS = {
     // -- FingerprintCapture: administración sin efecto real en el hardware --
-    aw_fingerprint_capture_create(args, channel, reply) {
+    aw_fingerprint_capture_create(ctx, args, channel, reply) {
       reply(true, 0, "");
     },
-    aw_fingerprint_capture_destroy(args, channel, reply) {
-      this._captureCache.delete(channel);
+    aw_fingerprint_capture_destroy(ctx, args, channel, reply) {
+      ctx.captureCache.delete(channel);
       reply(null, 0, "");
     },
-    aw_fingerprint_capture_open_device(args, channel, reply) {
+    aw_fingerprint_capture_open_device(ctx, args, channel, reply) {
       // args[0] es un CSV de escaneres deseados -- este puente ya sabe cuál usar (config.env),
       // no hace falta elegir aquí.
       reply(true, 0, "");
     },
-    aw_fingerprint_capture_close(args, channel, reply) {
+    aw_fingerprint_capture_close(ctx, args, channel, reply) {
       reply(null, 0, "");
     },
 
     // -- Captura real --
-    aw_fingerprint_capture_start_auto_capture(args, channel, reply) {
+    aw_fingerprint_capture_start_auto_capture(ctx, args, channel, reply) {
       const impression = args[0];
       const info = describeImpression(impression);
       if (info.kind === "unsupported" || info.kind === "finger_ref") {
@@ -279,76 +279,77 @@
         return;
       }
       const hand = info.kind === "slap" ? info.hand : info.kind === "single_rolled" ? "single_rolled" : "single";
-      this._pushEvent(channel, "aw_fingerprint_capture_autocapture_status_updated", ["capturing"]);
-      this._captureReal(hand)
+      ctx.pushEvent(channel, "aw_fingerprint_capture_autocapture_status_updated", ["capturing"]);
+      ctx
+        .captureReal(hand)
         .then((images) => {
-          const cache = this._captureCache.get(channel) || new Map();
+          const cache = ctx.captureCache.get(channel) || new Map();
           images.forEach((img) => cache.set(img.label, { base64: img.base64, format: img.format || "png", nistQuality: img.nistQuality }));
-          this._captureCache.set(channel, cache);
-          this._pushEvent(channel, "aw_fingerprint_capture_captured_image_updated", [impression]);
-          this._pushEvent(channel, "aw_fingerprint_capture_autocapture_status_updated", ["completed"]);
+          ctx.captureCache.set(channel, cache);
+          ctx.pushEvent(channel, "aw_fingerprint_capture_captured_image_updated", [impression]);
+          ctx.pushEvent(channel, "aw_fingerprint_capture_autocapture_status_updated", ["completed"]);
           reply(null, 0, "");
         })
         .catch((err) => {
-          this._pushEvent(channel, "aw_fingerprint_capture_autocapture_status_updated", ["failed"]);
+          ctx.pushEvent(channel, "aw_fingerprint_capture_autocapture_status_updated", ["failed"]);
           reply(null, -1, err && err.message ? err.message : "Error de captura");
         });
     },
-    aw_fingerprint_capture_disable_auto_capture(args, channel, reply) {
+    aw_fingerprint_capture_disable_auto_capture(ctx, args, channel, reply) {
       reply(null, 0, "");
     },
-    aw_fingerprint_capture_end_auto_capture(args, channel, reply) {
+    aw_fingerprint_capture_end_auto_capture(ctx, args, channel, reply) {
       // No se guarda el requestId en vuelo por canal en esta version simple: si hace falta
       // cancelar activamente una captura larga, agregar ese seguimiento aqui. Por ahora, dejar
       // que expire por CAPTURE_TIMEOUT_MS en el puente es aceptable para este adaptador.
       reply(null, 0, "");
     },
-    aw_fingerprint_capture_get_captured_image(args, channel, reply) {
-      const cache = this._captureCache.get(channel);
+    aw_fingerprint_capture_get_captured_image(ctx, args, channel, reply) {
+      const cache = ctx.captureCache.get(channel);
       const entry = cache && cache.size > 0 ? Array.from(cache.values())[0] : null;
       reply(entry ? entry.base64 : null, entry ? 0 : -1, entry ? "" : "No hay imagen capturada.");
     },
-    aw_fingerprint_capture_set_finger_missing(args, channel, reply) {
+    aw_fingerprint_capture_set_finger_missing(ctx, args, channel, reply) {
       reply(null, 0, "");
     },
-    aw_fingerprint_capture_reset_missing_fingers(args, channel, reply) {
+    aw_fingerprint_capture_reset_missing_fingers(ctx, args, channel, reply) {
       reply(null, 0, "");
     },
 
     // -- FingerprintSet: administración --
-    aw_fingerprint_set_create(args, channel, reply) {
+    aw_fingerprint_set_create(ctx, args, channel, reply) {
       reply(true, 0, "");
     },
-    aw_fingerprint_set_destroy(args, channel, reply) {
-      this._setImpressions.delete(channel);
+    aw_fingerprint_set_destroy(ctx, args, channel, reply) {
+      ctx.setImpressions.delete(channel);
       reply(null, 0, "");
     },
-    aw_fingerprint_set_reset(args, channel, reply) {
-      this._setImpressions.set(channel, new Map());
+    aw_fingerprint_set_reset(ctx, args, channel, reply) {
+      ctx.setImpressions.set(channel, new Map());
       reply(null, 0, "");
     },
-    aw_fingerprint_set_clear_all_impressions(args, channel, reply) {
-      this._setImpressions.set(channel, new Map());
+    aw_fingerprint_set_clear_all_impressions(ctx, args, channel, reply) {
+      ctx.setImpressions.set(channel, new Map());
       reply(null, 0, "");
     },
-    aw_fingerprint_set_clear_impression(args, channel, reply) {
-      const map = this._setImpressions.get(channel);
+    aw_fingerprint_set_clear_impression(ctx, args, channel, reply) {
+      const map = ctx.setImpressions.get(channel);
       if (map) map.delete(args[0]);
       reply(null, 0, "");
     },
-    aw_fingerprint_set_set_finger_missing(args, channel, reply) {
+    aw_fingerprint_set_set_finger_missing(ctx, args, channel, reply) {
       reply(null, 0, "");
     },
 
     // Vincula una imagen ya capturada (de un canal de FingerprintCapture) a una impresión de
     // este FingerprintSet -- ver aw_fingerprint_set.js:1105-1138: el 2do argumento es el objeto
     // `fingerprintCapture` completo, del cual el propio Aware extrae `.channel`.
-    aw_fingerprint_set_set_fingerprint_capture_image(args, channel, reply) {
+    aw_fingerprint_set_set_fingerprint_capture_image(ctx, args, channel, reply) {
       const impression = args[0];
       const fingerprintCapture = args[1];
       const sourceChannel = fingerprintCapture && fingerprintCapture.channel;
       const info = describeImpression(impression);
-      const sourceCache = this._captureCache.get(sourceChannel);
+      const sourceCache = ctx.captureCache.get(sourceChannel);
       if (!sourceCache) {
         reply(null, -1, "Canal de captura de origen no encontrado.");
         return;
@@ -358,35 +359,35 @@
         reply(null, -1, "No hay una imagen capturada para esta impresión.");
         return;
       }
-      const map = this._setImpressions.get(channel) || new Map();
+      const map = ctx.setImpressions.get(channel) || new Map();
       map.set(impression, finger);
-      this._setImpressions.set(channel, map);
+      ctx.setImpressions.set(channel, map);
       // El FingerprintSet consulta las imagenes por su propio cache -- se copia por
       // conveniencia, ya indexado por canal de origen (los getters abajo lo resuelven).
-      this._captureCache.set(channel, sourceCache);
+      ctx.captureCache.set(channel, sourceCache);
       reply(null, 0, "");
     },
 
-    aw_fingerprint_set_is_finger_present(args, channel, reply) {
+    aw_fingerprint_set_is_finger_present(ctx, args, channel, reply) {
       const info = describeImpression(args[0]);
-      const map = this._setImpressions.get(channel);
+      const map = ctx.setImpressions.get(channel);
       const present = Boolean(info.finger && map && map.has(args[0]));
       reply(present, 0, "");
     },
-    aw_fingerprint_set_is_impression_analyzed(args, channel, reply) {
-      const map = this._setImpressions.get(channel);
+    aw_fingerprint_set_is_impression_analyzed(ctx, args, channel, reply) {
+      const map = ctx.setImpressions.get(channel);
       reply(Boolean(map && map.has(args[0])), 0, "");
     },
-    aw_fingerprint_set_enough_digits_captured(args, channel, reply) {
-      const map = this._setImpressions.get(channel);
+    aw_fingerprint_set_enough_digits_captured(ctx, args, channel, reply) {
+      const map = ctx.setImpressions.get(channel);
       reply(Boolean(map && map.size > 0), 0, "");
     },
 
     // Calidad NIST: RealScan la entrega por dedo en cada captura (nistQuality) -- es el
     // equivalente real más cercano a NFIQ que este puente tiene, así que se usa directo.
-    aw_fingerprint_set_get_nfiq_score(args, channel, reply) {
-      const finger = this._resolveSetFinger(channel, args[0]);
-      const cache = this._captureCache.get(channel);
+    aw_fingerprint_set_get_nfiq_score(ctx, args, channel, reply) {
+      const finger = ctx.resolveSetFinger(channel, args[0]);
+      const cache = ctx.captureCache.get(channel);
       const entry = finger && cache ? cache.get(finger) : null;
       if (!entry || entry.nistQuality == null) {
         reply(SCORE_NOT_AVAILABLE, 0, "");
@@ -394,55 +395,36 @@
       }
       reply(entry.nistQuality, 0, "");
     },
-    aw_fingerprint_set_get_segmentation_quality(args, channel, reply) {
+    aw_fingerprint_set_get_segmentation_quality(ctx, args, channel, reply) {
       // Mismo valor que NFIQ: RealScan no distingue "calidad de segmentación" de "calidad NIST"
       // como dos métricas separadas -- ver SCORE_NOT_AVAILABLE arriba para el sentinel.
-      HANDLERS.aw_fingerprint_set_get_nfiq_score.call(this, args, channel, reply);
+      HANDLERS.aw_fingerprint_set_get_nfiq_score(ctx, args, channel, reply);
     },
 
     // Imágenes derivadas (input/segmentada/redimensionada/calidad): RealScan no las distingue
     // entre sí -- se devuelve la MISMA imagen ya capturada para las cuatro variantes, en vez de
     // fabricar una diferencia que no existe.
-    aw_fingerprint_set_get_input_image(args, channel, reply) {
-      this._replyWithCachedImage(channel, this._resolveSetFinger(channel, args[0]), reply);
+    aw_fingerprint_set_get_input_image(ctx, args, channel, reply) {
+      ctx.replyWithCachedImage(channel, ctx.resolveSetFinger(channel, args[0]), reply);
     },
-    aw_fingerprint_set_get_segmented_image(args, channel, reply) {
-      this._replyWithCachedImage(channel, this._resolveSetFinger(channel, args[0]), reply);
+    aw_fingerprint_set_get_segmented_image(ctx, args, channel, reply) {
+      ctx.replyWithCachedImage(channel, ctx.resolveSetFinger(channel, args[0]), reply);
     },
-    aw_fingerprint_set_get_sized_image(args, channel, reply) {
-      this._replyWithCachedImage(channel, this._resolveSetFinger(channel, args[0]), reply);
+    aw_fingerprint_set_get_sized_image(ctx, args, channel, reply) {
+      ctx.replyWithCachedImage(channel, ctx.resolveSetFinger(channel, args[0]), reply);
     },
-    aw_fingerprint_set_get_quality_image(args, channel, reply) {
-      this._replyWithCachedImage(channel, this._resolveSetFinger(channel, args[0]), reply);
+    aw_fingerprint_set_get_quality_image(ctx, args, channel, reply) {
+      ctx.replyWithCachedImage(channel, ctx.resolveSetFinger(channel, args[0]), reply);
     },
   };
 
   // Funciones propietarias sin equivalente real -- ver UNSUPPORTED_FUNCTIONS al inicio del
   // archivo. Se generan aquí para no repetir el mismo cuerpo a mano.
   UNSUPPORTED_FUNCTIONS.forEach((fn) => {
-    HANDLERS[fn] = function (args, channel, reply) {
+    HANDLERS[fn] = function (ctx, args, channel, reply) {
       reply(null, -1, `${fn} no esta disponible: sin equivalente real en RealScan/RS_SDK.`);
     };
   });
 
-  // ---- Helpers de instancia (agregados al prototipo para poder usar `this` desde HANDLERS) --
-
-  WebsocketTransport.prototype._resolveSetFinger = function (channel, impression) {
-    const map = this._setImpressions.get(channel);
-    if (map && map.has(impression)) return map.get(impression);
-    const info = describeImpression(impression);
-    return info.finger || null;
-  };
-
-  WebsocketTransport.prototype._replyWithCachedImage = function (channel, finger, reply) {
-    const cache = this._captureCache.get(channel);
-    const entry = finger && cache ? cache.get(finger) : null;
-    if (!entry) {
-      reply(null, -1, "No hay imagen disponible para este dedo.");
-      return;
-    }
-    reply(entry.base64, 0, "");
-  };
-
-  window.WebsocketTransport = WebsocketTransport;
+  window.createWebsocketTransport = createWebsocketTransport;
 })();
