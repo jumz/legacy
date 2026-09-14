@@ -21,8 +21,9 @@ function connect() {
     mostrarEspera();
     statusElement.innerText = "Creando websocket...";
     // Puerto de WSS-DEVICES (config.env, CAM_PORT) -- el original apuntaba al puerto por
-    // default del backend nativo de Aware (2080). Ajusta si tu bridge usa otro puerto.
-    websocket = new WebSocket("ws://localhost:23123");
+    // default del backend nativo de Aware (2080). Debe coincidir con el que ya usan
+    // internorostro.js/internoiris.js (cámara y huella comparten el mismo puerto).
+    websocket = new WebSocket("ws://localhost:20008");
     websocket.onopen = function (event) {
         var transport = createWebsocketTransport(websocket);
         statusElement.innerText = "Creando componente de captura...";

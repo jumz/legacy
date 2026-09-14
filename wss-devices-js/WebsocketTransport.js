@@ -29,7 +29,7 @@
  * Uso (en vez de cargar el WebsocketTransport.js original de Aware):
  *   <script src=".../wss-devices-js/WebsocketTransport.js"></script>
  *   <script>
- *     var ws = new WebSocket("ws://localhost:23123"); // puerto de WSS-DEVICES, no el 2080 original
+ *     var ws = new WebSocket("ws://localhost:20008"); // puerto de WSS-DEVICES (config.env, CAM_PORT), no el 2080 original
  *     ws.onopen = function () {
  *       var transport = createWebsocketTransport(ws);
  *       var fpCapture = createFingerprintCapture(transport, "fpCaptureChannel");
@@ -64,7 +64,11 @@
   // importar qué versión de esos scripts esté corriendo: (a) cualquier intento de conectar al
   // 2080 se redirija al puerto real de WSS-DEVICES, y (b) cualquier intento de conectar al 2012
   // se neutralice en silencio (un socket que nunca abre ni falla) en vez de mostrar el error.
-  const WSS_DEVICES_PORT = 23123;
+  // Debe coincidir con CAM_PORT en el config.env del puente -- confirmado 2026-09-14 que en
+  // esta instalación es 20008, NO el 23123 usado en otras (internorostro.js/internoiris.js ya
+  // apuntan a 20008; cámara y huella comparten el mismo puerto, ver "Puerto único" en el README
+  // de WSS-DEVICES). Ajustar aquí si tu instalación usa otro valor.
+  const WSS_DEVICES_PORT = 20008;
   const NativeWebSocket = window.WebSocket;
 
   function createNoopSocket() {
