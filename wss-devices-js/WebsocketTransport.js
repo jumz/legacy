@@ -344,7 +344,16 @@
           const cache = ctx.captureCache.get(channel) || new Map();
           images.forEach((img) => cache.set(img.label, { base64: img.base64, format: img.format || "png", nistQuality: img.nistQuality }));
           ctx.captureCache.set(channel, cache);
-          ctx.pushEvent(channel, "aw_fingerprint_capture_captured_image_updated", [impression]);
+          // capturedImageUpdated espera la imagen en base64 directamente, no un número de
+          // impresión (confirmado en aw_fingerprint_capture.js:705-711: reenvía result.args tal
+          // cual al callback del usuario, y el JSDoc de setCapturedImageUpdated dice "Callback
+          // with the captured image", mismo formato que la vista previa). RealScan no entrega
+          // una sola foto "cruda" del slap completo como una sola imagen -- ya viene segmentada
+          // por dedo -- así que se usa la primera imagen capturada como representativa para esta
+          // vista previa; el resultado real por dedo lo resuelve getSegments() en el wiring vía
+          // getSegmentedImage(), que sí lee del cache completo.
+          const preview = images.length > 0 ? images[0].base64 : null;
+          ctx.pushEvent(channel, "aw_fingerprint_capture_captured_image_updated", [preview]);
           ctx.pushEvent(channel, "aw_fingerprint_capture_autocapture_status_updated", [AUTOCAPTURE_STATUS_COMPLETED]);
           reply(null, 0, "");
         })
