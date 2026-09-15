@@ -409,12 +409,16 @@
     },
 
     // Vincula una imagen ya capturada (de un canal de FingerprintCapture) a una impresión de
-    // este FingerprintSet -- ver aw_fingerprint_set.js:1105-1138: el 2do argumento es el objeto
-    // `fingerprintCapture` completo, del cual el propio Aware extrae `.channel`.
+    // este FingerprintSet -- ver aw_fingerprint_set.js:1105-1138: PESE a que el JSDoc dice
+    // "@param {String} fingerprintCapture FingerprintCapture object", el código mismo hace
+    // `fingerprintCapture = fingerprintCapture.channel;` ANTES de mandarlo por RPC (línea 1107)
+    // -- o sea que args[1] YA es el string del canal, no un objeto. Leer `.channel` de ahí
+    // (versión anterior de este adaptador) daba `undefined` siempre, y como el wiring no tiene
+    // `.catch()` en la promesa de setFingerprintCaptureImage, el rechazo se perdía en silencio
+    // y getSegments() nunca se ejecutaba (confirmado 2026-09-14: "Resultados" quedaba vacío).
     aw_fingerprint_set_set_fingerprint_capture_image(ctx, args, channel, reply) {
       const impression = args[0];
-      const fingerprintCapture = args[1];
-      const sourceChannel = fingerprintCapture && fingerprintCapture.channel;
+      const sourceChannel = args[1];
       const info = describeImpression(impression);
       const sourceCache = ctx.captureCache.get(sourceChannel);
       if (!sourceCache) {
