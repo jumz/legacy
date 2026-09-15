@@ -330,6 +330,7 @@
 
     // -- Captura real --
     aw_fingerprint_capture_start_auto_capture(ctx, args, channel, reply) {
+      console.log("[WebsocketTransport][DIAG] start_auto_capture invocado -- impression=", args[0], new Error().stack);
       const impression = args[0];
       const info = describeImpression(impression);
       if (info.kind === "unsupported" || info.kind === "finger_ref") {
