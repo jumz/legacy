@@ -433,9 +433,14 @@
       // adaptador) rechazaba SIEMPRE estas capturas -- confirmado 2026-09-14: el escáner
       // capturaba bien los 4 dedos (LED correcto) pero "Resultados" quedaba vacío porque esta
       // función rechazaba en silencio (el wiring no tiene .catch() en esta promesa).
-      const finger = info.finger || (sourceCache.size === 1 ? Array.from(sourceCache.keys())[0] : null);
-      console.log("[WebsocketTransport][DIAG] set_fingerprint_capture_image: impression=", impression,
-        "info=", info, "finger resuelto=", finger, "labels en sourceCache=", Array.from(sourceCache.keys()));
+      // Para dedo individual (single_flat/single_rolled), el hardware NO puede saber si es
+      // izquierdo o derecho -- a diferencia de un slap, no hay contexto de mano completa para
+      // inferirlo. Confirmado en hardware (2026-09-14): estas capturas quedan etiquetadas
+      // "unknown" en vez del nombre que IMPRESSION_INFO adivina (ej. "left_little"). Por eso
+      // aquí se prefiere SIEMPRE la única etiqueta real que trae el cache cuando hay una sola
+      // (el caso normal de single_flat/single_rolled), y `info.finger` queda solo como último
+      // recurso si por algún motivo el cache tuviera más de una entrada.
+      const finger = (sourceCache.size === 1 ? Array.from(sourceCache.keys())[0] : null) || info.finger;
       if (info.kind !== "slap" && (!finger || !sourceCache.has(finger))) {
         reply(null, -1, "No hay una imagen capturada para esta impresión.");
         return;
