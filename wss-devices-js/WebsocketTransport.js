@@ -434,6 +434,8 @@
       // capturaba bien los 4 dedos (LED correcto) pero "Resultados" quedaba vacío porque esta
       // función rechazaba en silencio (el wiring no tiene .catch() en esta promesa).
       const finger = info.finger || (sourceCache.size === 1 ? Array.from(sourceCache.keys())[0] : null);
+      console.log("[WebsocketTransport][DIAG] set_fingerprint_capture_image: impression=", impression,
+        "info=", info, "finger resuelto=", finger, "labels en sourceCache=", Array.from(sourceCache.keys()));
       if (info.kind !== "slap" && (!finger || !sourceCache.has(finger))) {
         reply(null, -1, "No hay una imagen capturada para esta impresión.");
         return;
