@@ -172,6 +172,20 @@
   const SINGLE_FINGER_RETRY_DELAY_MS = 2000;
   const SINGLE_FINGER_MAX_ATTEMPTS = 30;
 
+  // Muestra el progreso del reintento en la pantalla del operador. Se escribe directo sobre
+  // el <span id="status"> que ya usan internohuellasindividual.php/internohuellasroladas.php
+  // (en vez de pasar por el wiring script) por la misma razón del comentario de arriba: ese
+  // <span> vive en un archivo que sí se despliega de forma confiable (este adaptador), a
+  // diferencia de los wiring scripts. Sin esto, el operador solo veía "Capturando..." fijo
+  // durante hasta 60s de reintentos silenciosos, sin saber que debía retirar y volver a
+  // colocar el dedo.
+  function showRetryStatus(attemptNumber) {
+    const statusElement = document.getElementById("status");
+    if (!statusElement) return;
+    statusElement.innerText =
+      `Reintentando (intento ${attemptNumber} de ${SINGLE_FINGER_MAX_ATTEMPTS})... retira el dedo por completo y vuelve a colocarlo.`;
+  }
+
   // Funciones propietarias de Aware sin equivalente real en RealScan/RS_SDK -- responden error
   // explícito "no disponible" en vez de un valor inventado.
   const UNSUPPORTED_FUNCTIONS = new Set([
@@ -412,6 +426,7 @@
                 `[WebsocketTransport] Intento ${attemptNumber} de captura de dedo individual falló, reintentando en ${SINGLE_FINGER_RETRY_DELAY_MS}ms:`,
                 err && err.message
               );
+              showRetryStatus(attemptNumber);
               setTimeout(() => attemptCapture(attemptNumber + 1), SINGLE_FINGER_RETRY_DELAY_MS);
               return;
             }
