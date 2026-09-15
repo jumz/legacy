@@ -421,17 +421,26 @@
       const sourceChannel = args[1];
       const info = describeImpression(impression);
       const sourceCache = ctx.captureCache.get(sourceChannel);
-      if (!sourceCache) {
-        reply(null, -1, "Canal de captura de origen no encontrado.");
+      if (!sourceCache || sourceCache.size === 0) {
+        reply(null, -1, "Canal de captura de origen no encontrado o sin imágenes.");
         return;
       }
+
+      // "slap" (4 dedos o pulgares) no tiene UN dedo que asociar aquí -- son varios. El wiring
+      // (getSegments() en internohuellas.js) consulta cada dedo por separado después, vía
+      // ImpressionInfo.SingleFingerToFingerInSlap + get_segmented_image, que ya leen del cache
+      // completo copiado abajo. Exigir un solo "finger" para un slap (versión anterior de este
+      // adaptador) rechazaba SIEMPRE estas capturas -- confirmado 2026-09-14: el escáner
+      // capturaba bien los 4 dedos (LED correcto) pero "Resultados" quedaba vacío porque esta
+      // función rechazaba en silencio (el wiring no tiene .catch() en esta promesa).
       const finger = info.finger || (sourceCache.size === 1 ? Array.from(sourceCache.keys())[0] : null);
-      if (!finger || !sourceCache.has(finger)) {
+      if (info.kind !== "slap" && (!finger || !sourceCache.has(finger))) {
         reply(null, -1, "No hay una imagen capturada para esta impresión.");
         return;
       }
+
       const map = ctx.setImpressions.get(channel) || new Map();
-      map.set(impression, finger);
+      if (finger) map.set(impression, finger);
       ctx.setImpressions.set(channel, map);
       // El FingerprintSet consulta las imagenes por su propio cache -- se copia por
       // conveniencia, ya indexado por canal de origen (los getters abajo lo resuelven).
@@ -495,6 +504,14 @@
     HANDLERS[fn] = function (ctx, args, channel, reply) {
       reply(null, -1, `${fn} no esta disponible: sin equivalente real en RealScan/RS_SDK.`);
     };
+  });
+
+  // Los wiring scripts (internohuellas.js y hermanos) no tienen .catch() en varias de sus
+  // cadenas de promesas -- un rechazo (ej. de setFingerprintCaptureImage) se pierde en silencio,
+  // sin ningún error visible, dejando la UI a medias sin explicación (confirmado 2026-09-14, dos
+  // veces distintas). Este listener global lo saca a la luz para no tener que adivinar de nuevo.
+  window.addEventListener("unhandledrejection", function (event) {
+    console.error("[WebsocketTransport] Promesa rechazada sin capturar (revisa qué la generó):", event.reason);
   });
 
   window.createWebsocketTransport = createWebsocketTransport;
