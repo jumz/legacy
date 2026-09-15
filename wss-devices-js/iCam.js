@@ -107,6 +107,21 @@ class TD100Client {
         this._previewEye = null;  // solo aplica a "iris": "both" | "right" | "left"
 
         // ============================================================
+        // AUTO CAPTURA DE IRIS (reintento automático mientras la cámara está conectada) --
+        // sin confirmar todavía en hardware (2026-09-15). A diferencia de AutoFace (que hay que
+        // simular por completo porque WSS-DEVICES no detecta rostro), el modo Enroll de iris SÍ
+        // auto-detecta y auto-dispara por sí solo con solo estar armado (ver nota de "Vista
+        // previa continua" al inicio del archivo) -- por eso aquí no hace falta ningún análisis
+        // de frames, solo reintentar captureIris() en bucle hasta que el hardware entregue un
+        // resultado real, dejando la vista previa visible entre intentos. _irisAutoCaptureGeneration
+        // invalida reintentos viejos cuando se llama a captureIris() de nuevo (clic en "Capturar"
+        // con el mismo o distinto ojo) -- mismo patrón que el reintento de dedo individual en
+        // WebsocketTransport.js.
+        this._irisAutoCaptureGeneration = 0;
+        this._irisAutoCaptureMode = "both";
+        this._irisAutoCaptureRetryDelayMs = 1500;
+
+        // ============================================================
         // AUTO FACE (simulado en cliente -- ver nota al inicio del archivo)
         // ============================================================
         this.autoFaceUIActive = false;
@@ -295,6 +310,21 @@ class TD100Client {
             // Si sigue pendiente, falló
             if (this.capturePending === type) {
                 this.capturePending = null;
+
+                // Auto-captura de iris (ver "AUTO CAPTURA DE IRIS"): si nunca llegó ni resultado
+                // ni error (p.ej. hipo del WS), reintenta igual que ante un error explícito, en
+                // vez de dejar el bucle detenido en silencio.
+                if (type === "iris") {
+                    const generation = this._irisAutoCaptureGeneration;
+                    this.clearBusy();
+                    this._stopPreview();
+                    this.setStatus("Reintentando... (sin respuesta)", "warning");
+                    setTimeout(
+                        () => this._attemptIrisCapture(this._irisAutoCaptureMode, generation),
+                        this._irisAutoCaptureRetryDelayMs
+                    );
+                    return;
+                }
 
                 // Para face manual
                 this.expectManualFace = false;
@@ -614,6 +644,21 @@ class TD100Client {
                     this._autoFaceRetryOrFail();
                     break;
                 }
+                // Captura automática de iris (ver "AUTO CAPTURA DE IRIS" en el constructor):
+                // reintenta en vez de mostrar el error y detenerse -- el operador solo ve el
+                // status "Reintentando...", no un diálogo de error, mientras siga sin capturar.
+                if (this.capturePending === "iris") {
+                    const generation = this._irisAutoCaptureGeneration;
+                    this.clearCapturePending();
+                    this.clearBusy();
+                    this._stopPreview();
+                    this.setStatus(`Reintentando... (${msg.message || "sin detectar"})`, "warning");
+                    setTimeout(
+                        () => this._attemptIrisCapture(this._irisAutoCaptureMode, generation),
+                        this._irisAutoCaptureRetryDelayMs
+                    );
+                    break;
+                }
                 this.clearCapturePending();
                 this.expectManualFace = false;
                 this.clearBusy();
@@ -638,10 +683,18 @@ class TD100Client {
             this.lastLiveTs = 0;
             this._autoWakeDone = false;
             this.setStatus("Cámara conectada", "success");
-            this._resumeIdlePreview();
+            if (this.previewMode === "iris") {
+                // Arranca (o reanuda tras una reconexión) la captura automática de iris -- ver
+                // nota de "AUTO CAPTURA DE IRIS" arriba. _resumeIdlePreview() no aplica aquí (para
+                // iris solo detiene la vista previa, no la reinicia).
+                this.captureIris(this._irisAutoCaptureMode);
+            } else {
+                this._resumeIdlePreview();
+            }
         } else if (!connected && this.cameraConnected) {
             this.cameraConnected = false;
             this.lastLiveTs = 0;
+            this._irisAutoCaptureGeneration++; // invalida cualquier reintento de iris pendiente
             this._stopPreview();
             this.resetLive();
             if (this.autoFaceUIActive) {
@@ -657,6 +710,11 @@ class TD100Client {
     // siempre llegan ambas.
     _handleCaptureResult(msg) {
         const images = msg.images || [];
+        // Resultado real de iris: invalida cualquier reintento automático que hubiera quedado
+        // programado (ver "AUTO CAPTURA DE IRIS") -- ya no hace falta seguir buscando.
+        if (images.some((img) => img.label === "right_iris" || img.label === "left_iris")) {
+            this._irisAutoCaptureGeneration++;
+        }
         // Cada imagen se procesa aislada: si una revienta (p.ej. porque la página no configuró
         // el <img> correspondiente), no debe impedir que el resto se muestre NI que se llegue al
         // clearCapturePending/_resumeIdlePreview de abajo -- sin este aislamiento, una excepción
@@ -942,13 +1000,37 @@ class TD100Client {
         this._autoFacePrevFrame = null;
     }
 
+    // Punto de entrada público -- lo usa tanto el auto-arranque al conectar la cámara
+    // (_applyCameraStatus) como el clic en "Capturar". SIEMPRE reinicia desde cero: cancela
+    // cualquier intento/reintento en curso (ver "AUTO CAPTURA DE IRIS" en el constructor) en vez
+    // de ignorarse si justo hay uno en vuelo -- así el clic en "Capturar" cumple su función de
+    // "reiniciar el proceso" sin importar el estado exacto en que estaba.
     captureIris(mode = "both") {
-        if (this.isBusy || this.autoFaceUIActive) return;
+        if (this.autoFaceUIActive) return;
+
+        this._irisAutoCaptureGeneration++;
+        const generation = this._irisAutoCaptureGeneration;
+        this._irisAutoCaptureMode = mode;
+
+        this.clearCapturePending();
+        this.clearBusy();
+        this._stopPreview();
+
+        this._attemptIrisCapture(mode, generation);
+    }
+
+    // Un intento individual del bucle de auto-captura de iris. `generation` viene de
+    // captureIris()/del reintento anterior -- si ya no coincide con
+    // this._irisAutoCaptureGeneration, algo más nuevo lo superó (otro clic en "Capturar", una
+    // desconexión, o un resultado real ya recibido) y este intento se descarta sin hacer nada.
+    _attemptIrisCapture(mode, generation) {
+        if (generation !== this._irisAutoCaptureGeneration) return;
+        if (!this.cameraConnected) return;
 
         this.markBusy(this.captureTimeoutMs + 1500);
         this.startCapturePending("iris", this.captureTimeoutMs);
 
-        this.setStatus("Captura iniciada...", "info");
+        this.setStatus("Buscando ojo(s)...", "info");
         this._startPreview("iris", mode);
         this.send({ type: "camera.capture", requestId: this._previewRequestId, capture: "iris", eye: mode });
     }
