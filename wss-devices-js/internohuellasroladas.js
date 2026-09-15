@@ -282,7 +282,16 @@ function startPreview() {
             statusElement.innerText = "Previsualización de la imagen...";
             EnableMarkMissing(true);
         }).catch(function (error_code) {
-            statusElement.innerText = "Un error ha ocurrido: " + error_code;
+            // Reintenta el MISMO dedo automáticamente en vez de detenerse -- antes, cualquier
+            // fallo (sensor sucio, rodado corto, etc.) dejaba la secuencia parada ahí, y la única
+            // forma de continuar era "Reiniciar captura", que borra TODO el progreso y recarga la
+            // página desde el primer dedo. Con 10 capturas independientes, cada una con algo de
+            // probabilidad de fallar, esto hacía casi imposible terminar la secuencia completa
+            // (confirmado 2026-09-15). No avanza impressionsIndex ni toca "Resultados" -- el
+            // operador solo necesita ajustar (limpiar sensor, rodar mejor) antes del siguiente
+            // intento automático.
+            statusElement.innerText = "Un error ha ocurrido: " + error_code + " -- reintentando...";
+            setTimeout(startPreview, 2000);
         });
     } else {
         promptElement.innerText = "";
