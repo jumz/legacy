@@ -165,6 +165,13 @@
   // de "por qué" falló (los que sí existen son sobre calidad/posición de dedo, que este puente
   // no distingue) -- usar el genérico en vez de fabricar una razón que no se puede confirmar.
 
+  // Reintento automático de captura de dedo individual (ver nota en
+  // aw_fingerprint_capture_start_auto_capture) -- 30 intentos x 2s = 60s de margen antes de
+  // reportar el fallo al wiring, tiempo de sobra para que el operador limpie el sensor o
+  // corrija la técnica de rodado entre intentos.
+  const SINGLE_FINGER_RETRY_DELAY_MS = 2000;
+  const SINGLE_FINGER_MAX_ATTEMPTS = 30;
+
   // Funciones propietarias de Aware sin equivalente real en RealScan/RS_SDK -- responden error
   // explícito "no disponible" en vez de un valor inventado.
   const UNSUPPORTED_FUNCTIONS = new Set([
@@ -349,7 +356,6 @@
 
     // -- Captura real --
     aw_fingerprint_capture_start_auto_capture(ctx, args, channel, reply) {
-      console.log("[WebsocketTransport][DIAG] start_auto_capture invocado -- impression=", args[0], new Error().stack);
       const impression = args[0];
       const info = describeImpression(impression);
       if (info.kind === "unsupported" || info.kind === "finger_ref") {
@@ -357,30 +363,62 @@
         return;
       }
       const hand = info.kind === "slap" ? info.hand : info.kind === "single_rolled" ? "single_rolled" : "single";
-      ctx.pushEvent(channel, "aw_fingerprint_capture_autocapture_status_updated", [AUTOCAPTURE_STATUS_CAPTURING]);
-      ctx
-        .captureReal(hand)
-        .then((images) => {
-          const cache = ctx.captureCache.get(channel) || new Map();
-          images.forEach((img) => cache.set(img.label, { base64: img.base64, format: img.format || "png", nistQuality: img.nistQuality }));
-          ctx.captureCache.set(channel, cache);
-          // capturedImageUpdated espera la imagen en base64 directamente, no un número de
-          // impresión (confirmado en aw_fingerprint_capture.js:705-711: reenvía result.args tal
-          // cual al callback del usuario, y el JSDoc de setCapturedImageUpdated dice "Callback
-          // with the captured image", mismo formato que la vista previa). RealScan no entrega
-          // una sola foto "cruda" del slap completo como una sola imagen -- ya viene segmentada
-          // por dedo -- así que se usa la primera imagen capturada como representativa para esta
-          // vista previa; el resultado real por dedo lo resuelve getSegments() en el wiring vía
-          // getSegmentedImage(), que sí lee del cache completo.
-          const preview = images.length > 0 ? images[0].base64 : null;
-          ctx.pushEvent(channel, "aw_fingerprint_capture_captured_image_updated", [preview]);
-          ctx.pushEvent(channel, "aw_fingerprint_capture_autocapture_status_updated", [AUTOCAPTURE_STATUS_COMPLETED]);
-          reply(null, 0, "");
-        })
-        .catch((err) => {
-          ctx.pushEvent(channel, "aw_fingerprint_capture_autocapture_status_updated", [AUTOCAPTURE_STATUS_ABORTED]);
-          reply(null, -1, err && err.message ? err.message : "Error de captura");
-        });
+
+      // Reintento automático para dedo individual (plano/rodado) SOLO dentro del adaptador --
+      // no en los wiring scripts (internohuellasroladas.js/internohuellasindividual.js): esos
+      // archivos se cargan desde una ruta cuya caché (nunca identificada con certeza -- no es
+      // CDN, no es nginx, no son múltiples servidores) sirve copias viejas de forma persistente,
+      // incluso con recarga forzada, incógnita nueva, y el servidor confirmado con el archivo
+      // correcto (ver commits de días anteriores). Un fix ahí mismo (agregado 2026-09-15,
+      // reintentar el mismo dedo en el wiring) nunca llegó a ejecutarse en el navegador por esta
+      // razón. Aquí, en cambio, SÍ llega siempre: este archivo se carga con ?v=... para forzar
+      // frescura, y las pruebas ya confirmaron que ese mecanismo funciona.
+      //
+      // Motivo del reintento: con 10 capturas de dedo individual independientes en fila, cada
+      // una con algo de probabilidad de fallar (RS_ERR_FINGER_EXIST/-116, RS_ERR_SENSOR_DIRTY/
+      // -115, etc.), la única forma de continuar tras un fallo era "Reiniciar captura" en el
+      // wiring -- que borra TODO el progreso y recarga la página desde el primer dedo. Esto
+      // hacía casi imposible completar la secuencia completa (confirmado en hardware
+      // 2026-09-15). Reintentando aquí, el wiring nunca se entera de los intentos fallidos
+      // individuales -- solo ve el resultado final, exitoso o (tras agotar los reintentos)
+      // fallido.
+      const isSingleFinger = info.kind === "single_flat" || info.kind === "single_rolled";
+      attemptCapture(1);
+
+      function attemptCapture(attemptNumber) {
+        ctx.pushEvent(channel, "aw_fingerprint_capture_autocapture_status_updated", [AUTOCAPTURE_STATUS_CAPTURING]);
+        ctx
+          .captureReal(hand)
+          .then((images) => {
+            const cache = ctx.captureCache.get(channel) || new Map();
+            images.forEach((img) => cache.set(img.label, { base64: img.base64, format: img.format || "png", nistQuality: img.nistQuality }));
+            ctx.captureCache.set(channel, cache);
+            // capturedImageUpdated espera la imagen en base64 directamente, no un número de
+            // impresión (confirmado en aw_fingerprint_capture.js:705-711: reenvía result.args
+            // tal cual al callback del usuario, y el JSDoc de setCapturedImageUpdated dice
+            // "Callback with the captured image", mismo formato que la vista previa). RealScan
+            // no entrega una sola foto "cruda" del slap completo como una sola imagen -- ya
+            // viene segmentada por dedo -- así que se usa la primera imagen capturada como
+            // representativa para esta vista previa; el resultado real por dedo lo resuelve
+            // getSegments() en el wiring vía getSegmentedImage(), que sí lee del cache completo.
+            const preview = images.length > 0 ? images[0].base64 : null;
+            ctx.pushEvent(channel, "aw_fingerprint_capture_captured_image_updated", [preview]);
+            ctx.pushEvent(channel, "aw_fingerprint_capture_autocapture_status_updated", [AUTOCAPTURE_STATUS_COMPLETED]);
+            reply(null, 0, "");
+          })
+          .catch((err) => {
+            if (isSingleFinger && attemptNumber < SINGLE_FINGER_MAX_ATTEMPTS) {
+              console.warn(
+                `[WebsocketTransport] Intento ${attemptNumber} de captura de dedo individual falló, reintentando en ${SINGLE_FINGER_RETRY_DELAY_MS}ms:`,
+                err && err.message
+              );
+              setTimeout(() => attemptCapture(attemptNumber + 1), SINGLE_FINGER_RETRY_DELAY_MS);
+              return;
+            }
+            ctx.pushEvent(channel, "aw_fingerprint_capture_autocapture_status_updated", [AUTOCAPTURE_STATUS_ABORTED]);
+            reply(null, -1, err && err.message ? err.message : "Error de captura");
+          });
+      }
     },
     aw_fingerprint_capture_disable_auto_capture(ctx, args, channel, reply) {
       reply(null, 0, "");
