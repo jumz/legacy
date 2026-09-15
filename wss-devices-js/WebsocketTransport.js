@@ -197,6 +197,10 @@
     // canal de FingerprintSet: Map(impression number -> finger label)
     const setImpressions = new Map();
     const pendingByRequestId = new Map(); // requestId -> { resolve, reject }
+    // Único requestId de captura en vuelo (a lo mucho una a la vez -- el puente ya lo garantiza
+    // con su propio candado por dispositivo) -- permite que endAutoCapture() mande un
+    // capture.cancel real en vez de ser un no-op. Ver nota en aw_fingerprint_capture_end_auto_capture.
+    let currentCaptureRequestId = null;
 
     function sendToBridge(message) {
       websocketHandle.send(JSON.stringify(message));
@@ -214,10 +218,12 @@
         const pending = pendingByRequestId.get(msg.requestId);
         if (!pending) return;
         pendingByRequestId.delete(msg.requestId);
+        if (currentCaptureRequestId === msg.requestId) currentCaptureRequestId = null;
         pending.resolve(msg.images || []);
       } else if (msg.type === "error" && pendingByRequestId.has(msg.requestId)) {
         const pending = pendingByRequestId.get(msg.requestId);
         pendingByRequestId.delete(msg.requestId);
+        if (currentCaptureRequestId === msg.requestId) currentCaptureRequestId = null;
         pending.reject(new Error(msg.message || msg.code || "Error de captura"));
       }
       // "device.status"/"device.list" no tienen equivalente en el protocolo de Aware que estas
@@ -231,9 +237,22 @@
     function captureReal(hand) {
       return new Promise((resolve, reject) => {
         const requestId = uuid();
+        currentCaptureRequestId = requestId;
         pendingByRequestId.set(requestId, { resolve, reject });
         sendToBridge({ type: "fingerprint.capture", requestId, hand });
       });
+    }
+
+    // Cancela la captura en vuelo (si hay una) mandando capture.cancel al puente real -- esto
+    // dispara el cancellationToken.Register de CaptureHandAsync en el C#, que ya llama
+    // RS_AbortCapture correctamente. Usado por aw_fingerprint_capture_end_auto_capture (ver
+    // abajo) -- antes era un no-op, y el botón "Reiniciar captura" de los wiring scripts nunca
+    // limpiaba el estado real del dispositivo, dejando cascadas de "-212"/"-203" en el siguiente
+    // intento (confirmado 2026-09-15).
+    function cancelCurrentCapture() {
+      if (!currentCaptureRequestId) return;
+      sendToBridge({ type: "capture.cancel", requestId: currentCaptureRequestId });
+      currentCaptureRequestId = null;
     }
 
     function pushEvent(channel, fn, args) {
@@ -261,7 +280,7 @@
 
     // Contexto que ven los HANDLERS -- reemplaza al `this` de la versión anterior (basada en
     // clase) ahora que la fábrica es una función simple, sin instancia que enlazar.
-    const ctx = { channels, captureCache, setImpressions, captureReal, pushEvent, resolveSetFinger, replyWithCachedImage };
+    const ctx = { channels, captureCache, setImpressions, captureReal, cancelCurrentCapture, pushEvent, resolveSetFinger, replyWithCachedImage };
 
     function dispatch(fn, args, channel, reply) {
       const handler = HANDLERS[fn];
@@ -367,9 +386,12 @@
       reply(null, 0, "");
     },
     aw_fingerprint_capture_end_auto_capture(ctx, args, channel, reply) {
-      // No se guarda el requestId en vuelo por canal en esta version simple: si hace falta
-      // cancelar activamente una captura larga, agregar ese seguimiento aqui. Por ahora, dejar
-      // que expire por CAPTURE_TIMEOUT_MS en el puente es aceptable para este adaptador.
+      // Antes era un no-op: el botón "Reiniciar captura" de los wiring scripts (que llama a
+      // esta función antes de reiniciar la secuencia) nunca cancelaba nada real en el puente,
+      // dejando la captura vieja "viva" -- el siguiente intento chocaba con ella (-212 "ya hay
+      // una captura en curso", o -203 si el choque pasaba en un punto distinto). Confirmado en
+      // hardware 2026-09-15. Ahora manda capture.cancel de verdad si hay una captura en vuelo.
+      ctx.cancelCurrentCapture();
       reply(null, 0, "");
     },
     aw_fingerprint_capture_get_captured_image(ctx, args, channel, reply) {
