@@ -123,6 +123,18 @@ class TD100Client {
         this._irisAutoCaptureRetryDelayMs = 1500;
 
         // ============================================================
+        // REINTENTO AUTOMÁTICO DE CAPTURA DE ROSTRO (frontal o perfil) -- ver la nota extensa en
+        // captureFace(). A diferencia de iris, esto NO se auto-arranca solo -- sigue siendo un
+        // clic en "Capturar" el que dispara el primer intento; el reintento es interno y
+        // transparente si ESE intento tarda demasiado o falla.
+        // ============================================================
+        this._faceRetryGeneration = 0;
+        this._faceCurrentAttempt = 0;
+        this._facePendingPose = "frontal";
+        this._faceRetryMaxAttempts = 10;
+        this._faceRetryDelayMs = 2000;
+
+        // ============================================================
         // AUTO FACE (simulado en cliente -- ver nota al inicio del archivo)
         // ============================================================
         this.autoFaceUIActive = false;
@@ -324,6 +336,13 @@ class TD100Client {
                         () => this._attemptIrisCapture(this._irisAutoCaptureMode, generation),
                         this._irisAutoCaptureRetryDelayMs
                     );
+                    return;
+                }
+
+                // Rostro/perfil manual (ver captureFace): si nunca llegó ni resultado ni error,
+                // reintenta la misma captura en vez de rendirse -- StartCapture+PressButton a
+                // veces tarda más de lo que este timeout espera, pero no está realmente colgado.
+                if (type === "face" && this._retryOrFailFace("sin respuesta")) {
                     return;
                 }
 
@@ -660,6 +679,12 @@ class TD100Client {
                     );
                     break;
                 }
+                // Rostro/perfil manual (ver captureFace): mismo criterio que iris arriba --
+                // reintentar la misma captura antes de rendirse y mostrar el error real.
+                if (this.capturePending === "face") {
+                    this.clearCapturePending();
+                    if (this._retryOrFailFace(msg.message || "error de captura")) break;
+                }
                 this.clearCapturePending();
                 this.expectManualFace = false;
                 this.clearBusy();
@@ -715,6 +740,11 @@ class TD100Client {
         // programado (ver "AUTO CAPTURA DE IRIS") -- ya no hace falta seguir buscando.
         if (images.some((img) => img.label === "right_iris" || img.label === "left_iris")) {
             this._irisAutoCaptureGeneration++;
+        }
+        // Resultado real de rostro/perfil: invalida cualquier reintento de captureFace() que
+        // hubiera quedado programado (ver _retryOrFailFace) -- ya llegó una imagen real.
+        if (images.some((img) => img.label === "face")) {
+            this._faceRetryGeneration++;
         }
         // Cada imagen se procesa aislada: si una revienta (p.ej. porque la página no configuró
         // el <img> correspondiente), no debe impedir que el resto se muestre NI que se llegue al
@@ -859,8 +889,24 @@ class TD100Client {
     // pausa que funciona para rostro frontal se cuelga con la persona de perfil (confirmado en
     // hardware 2026-09-15: solo se completaba presionando el botón físico de la cámara).
     // Experimental, sin confirmar todavía si el margen alcanza.
+    //
+    // Reintento automático (2026-09-15): StartCapture+PressButton del control ActiveX a veces
+    // tarda anormalmente (10-20s+) en vez de los <2s normales -- confirmado en hardware que no es
+    // un cuelgue infinito (el hilo se libera solo), solo tarda más de lo que el cliente espera.
+    // Mismo patrón ya probado con huella (WebsocketTransport.js) e iris ("AUTO CAPTURA DE IRIS"):
+    // en vez de mostrar "Tiempo de espera agotado" y quedarse ahí, se reintenta la MISMA captura
+    // (mismo pose) automáticamente, transparente para el operador salvo el status
+    // "Reintentando...". _faceRetryGeneration invalida reintentos viejos si se vuelve a hacer
+    // clic en "Capturar" mientras uno sigue en curso.
     captureFace(pose = "frontal") {
         if (this.isBusy || this.autoFaceUIActive) return;
+
+        this._faceRetryGeneration++;
+        this._attemptCaptureFace(pose, this._faceRetryGeneration, 1);
+    }
+
+    _attemptCaptureFace(pose, generation, attemptNumber) {
+        if (generation !== this._faceRetryGeneration) return;
 
         this.expectManualFace = true;
         if (this.manualFaceTimer) clearTimeout(this.manualFaceTimer);
@@ -871,10 +917,35 @@ class TD100Client {
 
         this.markBusy(this.captureTimeoutMs + 1000);
         this.startCapturePending("face", this.captureTimeoutMs);
+        this._facePendingPose = pose;
+        this._faceCurrentAttempt = attemptNumber;
 
-        this.setStatus("Captura iniciada...", "info");
+        this.setStatus(
+            attemptNumber === 1
+                ? "Captura iniciada..."
+                : `Reintentando (intento ${attemptNumber} de ${this._faceRetryMaxAttempts})...`,
+            "info"
+        );
         this._startPreview("face", null, pose);
         this.send({ type: "camera.capture", requestId: this._previewRequestId, capture: "face", pose });
+    }
+
+    // Llamado desde el timeout de startCapturePending y desde el "error" de handleMessage --
+    // decide si reintenta (pose/intento/generación guardados en _facePendingPose/
+    // _faceCurrentAttempt/_faceRetryGeneration) o si ya se rindió y debe mostrarse el error real
+    // al operador. Regresa true si programó un reintento (el llamador no debe mostrar error).
+    _retryOrFailFace(failMessage) {
+        if (this._faceCurrentAttempt < this._faceRetryMaxAttempts) {
+            const pose = this._facePendingPose || "frontal";
+            const generation = this._faceRetryGeneration;
+            const nextAttempt = this._faceCurrentAttempt + 1;
+            this.clearBusy();
+            this._stopPreview();
+            this.setStatus(`Reintentando... (${failMessage})`, "warning");
+            setTimeout(() => this._attemptCaptureFace(pose, generation, nextAttempt), this._faceRetryDelayMs);
+            return true;
+        }
+        return false;
     }
 
     // Simulado en el cliente -- ver nota al inicio del archivo. WSS-DEVICES no tiene detección
