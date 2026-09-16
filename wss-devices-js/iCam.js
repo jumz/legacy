@@ -105,6 +105,7 @@ class TD100Client {
         this._previewRequestId = null;
         this._previewMode = null; // "face" | "iris"
         this._previewEye = null;  // solo aplica a "iris": "both" | "right" | "left"
+        this._previewPose = null; // solo aplica a "face": "frontal" | "profile"
 
         // ============================================================
         // AUTO CAPTURA DE IRIS (reintento automático mientras la cámara está conectada) --
@@ -764,9 +765,11 @@ class TD100Client {
         });
     }
 
-    _startPreview(mode, eye) {
-        if (this._previewMode === mode && (mode !== "iris" || this._previewEye === eye)) {
-            return; // ya hay una sesión abierta en el modo/ojo correcto -- reusarla
+    _startPreview(mode, eye, pose) {
+        if (this._previewMode === mode &&
+            (mode !== "iris" || this._previewEye === eye) &&
+            (mode !== "face" || this._previewPose === (pose || "frontal"))) {
+            return; // ya hay una sesión abierta en el modo/ojo/pose correcto -- reusarla
         }
         this._stopPreview();
 
@@ -774,9 +777,11 @@ class TD100Client {
         this._previewRequestId = requestId;
         this._previewMode = mode;
         this._previewEye = eye || null;
+        this._previewPose = mode === "face" ? (pose || "frontal") : null;
 
         const payload = { type: "camera.preview.start", requestId, capture: mode };
         if (mode === "iris" && eye) payload.eye = eye;
+        if (mode === "face" && pose) payload.pose = pose;
         this.send(payload);
     }
 
@@ -786,6 +791,7 @@ class TD100Client {
         this._previewRequestId = null;
         this._previewMode = null;
         this._previewEye = null;
+        this._previewPose = null;
     }
 
     // Vuelve al modo de vista previa "idle" configurado (config.previewMode) tras terminar una
@@ -847,7 +853,13 @@ class TD100Client {
         // no-op intencional -- ver comentario del archivo.
     }
 
-    captureFace() {
+    // `pose` ("frontal", default, o "profile") -- ver la nota extensa en Td200CameraModule.
+    // CaptureFaceAsync (puente C#): con "profile" el servidor apaga el recuadro guía frontal y
+    // agrega un margen antes de disparar la captura, porque el mismo StartCapture+PressButton sin
+    // pausa que funciona para rostro frontal se cuelga con la persona de perfil (confirmado en
+    // hardware 2026-09-15: solo se completaba presionando el botón físico de la cámara).
+    // Experimental, sin confirmar todavía si el margen alcanza.
+    captureFace(pose = "frontal") {
         if (this.isBusy || this.autoFaceUIActive) return;
 
         this.expectManualFace = true;
@@ -861,8 +873,8 @@ class TD100Client {
         this.startCapturePending("face", this.captureTimeoutMs);
 
         this.setStatus("Captura iniciada...", "info");
-        this._startPreview("face");
-        this.send({ type: "camera.capture", requestId: this._previewRequestId, capture: "face" });
+        this._startPreview("face", null, pose);
+        this.send({ type: "camera.capture", requestId: this._previewRequestId, capture: "face", pose });
     }
 
     // Simulado en el cliente -- ver nota al inicio del archivo. WSS-DEVICES no tiene detección
