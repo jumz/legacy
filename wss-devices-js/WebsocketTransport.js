@@ -223,6 +223,15 @@
     // capture.cancel real en vez de ser un no-op. Ver nota en aw_fingerprint_capture_end_auto_capture.
     let currentCaptureRequestId = null;
 
+    // Invalida cadenas de reintento de dedo individual que quedaron huérfanas -- confirmado en
+    // hardware 2026-09-16: cancelCurrentCapture() (end_auto_capture) manda capture.cancel real,
+    // pero el setTimeout ya programado dentro de attemptCapture() no se enteraba y disparaba OTRO
+    // intento igual, chocando con la captura siguiente (dos cadenas de "Intento N" corriendo a la
+    // vez, cascada de "Ya hay una captura de huellas en curso"). Se incrementa aquí y se revisa
+    // al inicio de cada intento programado -- si ya no coincide, algo más nuevo (una cancelación,
+    // o una captura de otro dedo) lo superó y este intento se descarta sin hacer nada.
+    let captureGeneration = 0;
+
     function sendToBridge(message) {
       websocketHandle.send(JSON.stringify(message));
     }
@@ -397,13 +406,19 @@
       // individuales -- solo ve el resultado final, exitoso o (tras agotar los reintentos)
       // fallido.
       const isSingleFinger = info.kind === "single_flat" || info.kind === "single_rolled";
+      // Ver la nota de captureGeneration arriba -- una captura nueva siempre invalida cualquier
+      // cadena de reintento anterior que hubiera quedado viva (por ejemplo, si el wiring canceló
+      // el dedo anterior y pasó a este sin que el setTimeout pendiente de ese dedo se enterara).
+      const generation = ++captureGeneration;
       attemptCapture(1);
 
       function attemptCapture(attemptNumber) {
+        if (generation !== captureGeneration) return; // superado por una cancelación u otra captura
         ctx.pushEvent(channel, "aw_fingerprint_capture_autocapture_status_updated", [AUTOCAPTURE_STATUS_CAPTURING]);
         ctx
           .captureReal(hand)
           .then((images) => {
+            if (generation !== captureGeneration) return; // esta cadena ya fue superada
             const cache = ctx.captureCache.get(channel) || new Map();
             images.forEach((img) => cache.set(img.label, { base64: img.base64, format: img.format || "png", nistQuality: img.nistQuality }));
             ctx.captureCache.set(channel, cache);
@@ -421,6 +436,7 @@
             reply(null, 0, "");
           })
           .catch((err) => {
+            if (generation !== captureGeneration) return; // esta cadena ya fue superada
             if (isSingleFinger && attemptNumber < SINGLE_FINGER_MAX_ATTEMPTS) {
               console.warn(
                 `[WebsocketTransport] Intento ${attemptNumber} de captura de dedo individual falló, reintentando en ${SINGLE_FINGER_RETRY_DELAY_MS}ms:`,
@@ -445,6 +461,11 @@
       // una captura en curso", o -203 si el choque pasaba en un punto distinto). Confirmado en
       // hardware 2026-09-15. Ahora manda capture.cancel de verdad si hay una captura en vuelo.
       ctx.cancelCurrentCapture();
+      // Invalida también cualquier cadena de reintento de dedo individual que hubiera quedado
+      // programada (ver nota de captureGeneration) -- sin esto, el setTimeout pendiente de la
+      // captura recién cancelada disparaba un intento más, chocando con la captura del siguiente
+      // dedo (confirmado en hardware 2026-09-16: dos cadenas de "Intento N" corriendo a la vez).
+      captureGeneration++;
       reply(null, 0, "");
     },
     aw_fingerprint_capture_get_captured_image(ctx, args, channel, reply) {

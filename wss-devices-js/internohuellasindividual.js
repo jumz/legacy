@@ -24,6 +24,20 @@ var missingFingers = [];
 var captureComponent;
 var setComponent;
 
+// Avanza impressionsIndex saltando cualquier dedo ya marcado como "missing" (desmarcado por el
+// operador, ver el click handler de ".huellas" más abajo). Antes, desmarcar una casilla solo
+// hacía impressionsIndex++ una vez, sin importar CUÁL casilla era -- si se desmarcaban varias,
+// la secuencia quedaba completamente desincronizada (confirmado 2026-09-15: al dejar solo 3
+// casillas marcadas, la captura pidió los ÚLTIMOS 3 dedos del arreglo fijo, no los 3 realmente
+// marcados, porque el contador simplemente había avanzado 7 veces). Este chequeo por VALOR
+// (missingFingers, no una posición) arregla eso sin importar el orden en que se desmarquen.
+function advanceToNextCapturable() {
+    while (impressionsIndex < impressionsToCapture.length &&
+           missingFingers.indexOf(impressionsToCapture[impressionsIndex]) !== -1) {
+        impressionsIndex++;
+    }
+}
+
 function connect() {
     mostrarEspera();
     statusElement.innerText = "Creando websocket...";
@@ -48,6 +62,10 @@ function connect() {
             return captureComponent.openDevice(deviceName);
         }).then(function () {
             statusElement.innerText = "Inicializando previsualización...";
+            // Si el operador desmarcó casillas ANTES de que terminara de conectar (el caso más
+            // común, ya que las casillas responden desde que carga la página), esos dedos ya
+            // están en missingFingers -- hay que saltarlos antes del primer intento real.
+            advanceToNextCapturable();
             startPreview();
         }).catch(function (error) {
             console.log(error);
@@ -156,6 +174,7 @@ function onCapturedImage(base64Image) {
 
 
         impressionsIndex++;
+        advanceToNextCapturable();
         startPreview();
     });
 }
@@ -391,21 +410,33 @@ $('.huellas').click(function(){
         }).then(function () {
             console.log("HABILITADO");
         });        
-    }else{        
+    }else{
+        // Se registra por VALOR (missingFingers), no por posición -- antes esto hacía
+        // impressionsIndex++ a ciegas, así que desmarcar VARIAS casillas desincronizaba la
+        // secuencia completa (confirmado 2026-09-15: con 3 casillas marcadas, la captura pidió
+        // los últimos 3 dedos del arreglo fijo, no los 3 que realmente seguían marcados). Ver
+        // advanceToNextCapturable() al inicio del archivo.
+        if (missingFingers.indexOf(impression) === -1) missingFingers.push(impression);
+        var isCurrentImpression = impressionsToCapture[impressionsIndex] === impression;
         setComponent.setFingerMissing(impression, true).then(function(){
         return captureComponent.setFingerMissing(impression, true);
         }).then(function () {
             console.log("DESHABILITADO");
-            statusElement.innerText = "Marked as missing.";            
-            impressionsIndex++;
+            statusElement.innerText = "Marked as missing.";
+            // Solo hay que abortar/reiniciar la captura en curso si el dedo que se acaba de
+            // desmarcar es justo el que se está pidiendo AHORA MISMO. Si es un dedo que todavía
+            // no le toca su turno, ya quedó registrado arriba -- advanceToNextCapturable() lo
+            // va a saltar solo cuando la secuencia llegue a su posición, sin interrumpir nada.
+            if (!isCurrentImpression) return;
             captureComponent.endAutoCapture().then(function () {
                 setComponent.reset().then(function () {
                     return captureComponent.resetMissingFingers();
-                }).then(function () {                    
+                }).then(function () {
+                    advanceToNextCapturable();
                     startPreview();
-                    ocultarMensaje();                    
+                    ocultarMensaje();
                 });
-            });           
+            });
         });
     }
 
