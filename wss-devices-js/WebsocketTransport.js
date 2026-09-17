@@ -310,7 +310,28 @@
 
     // Contexto que ven los HANDLERS -- reemplaza al `this` de la versión anterior (basada en
     // clase) ahora que la fábrica es una función simple, sin instancia que enlazar.
-    const ctx = { channels, captureCache, setImpressions, captureReal, cancelCurrentCapture, pushEvent, resolveSetFinger, replyWithCachedImage };
+    // Los handlers (aw_fingerprint_capture_*) viven en un objeto de nivel superior, fuera de
+    // este cierre -- no pueden leer/escribir captureGeneration directo, solo lo que se les pasa
+    // aquí explícitamente por ctx (mismo motivo por el que cancelCurrentCapture/captureReal ya
+    // se exponen así). Confirmado en hardware 2026-09-17: referenciarla directo tronaba con
+    // "ReferenceError: captureGeneration is not defined" en cuanto se pedía cualquier captura.
+    const nextCaptureGeneration = () => ++captureGeneration;
+    const isCurrentCaptureGeneration = (generation) => generation === captureGeneration;
+    const invalidateCaptureGeneration = () => { captureGeneration++; };
+
+    const ctx = {
+      channels,
+      captureCache,
+      setImpressions,
+      captureReal,
+      cancelCurrentCapture,
+      pushEvent,
+      resolveSetFinger,
+      replyWithCachedImage,
+      nextCaptureGeneration,
+      isCurrentCaptureGeneration,
+      invalidateCaptureGeneration,
+    };
 
     function dispatch(fn, args, channel, reply) {
       const handler = HANDLERS[fn];
@@ -409,16 +430,16 @@
       // Ver la nota de captureGeneration arriba -- una captura nueva siempre invalida cualquier
       // cadena de reintento anterior que hubiera quedado viva (por ejemplo, si el wiring canceló
       // el dedo anterior y pasó a este sin que el setTimeout pendiente de ese dedo se enterara).
-      const generation = ++captureGeneration;
+      const generation = ctx.nextCaptureGeneration();
       attemptCapture(1);
 
       function attemptCapture(attemptNumber) {
-        if (generation !== captureGeneration) return; // superado por una cancelación u otra captura
+        if (!ctx.isCurrentCaptureGeneration(generation)) return; // superado por una cancelación u otra captura
         ctx.pushEvent(channel, "aw_fingerprint_capture_autocapture_status_updated", [AUTOCAPTURE_STATUS_CAPTURING]);
         ctx
           .captureReal(hand)
           .then((images) => {
-            if (generation !== captureGeneration) return; // esta cadena ya fue superada
+            if (!ctx.isCurrentCaptureGeneration(generation)) return; // esta cadena ya fue superada
             const cache = ctx.captureCache.get(channel) || new Map();
             images.forEach((img) => cache.set(img.label, { base64: img.base64, format: img.format || "png", nistQuality: img.nistQuality }));
             ctx.captureCache.set(channel, cache);
@@ -436,7 +457,7 @@
             reply(null, 0, "");
           })
           .catch((err) => {
-            if (generation !== captureGeneration) return; // esta cadena ya fue superada
+            if (!ctx.isCurrentCaptureGeneration(generation)) return; // esta cadena ya fue superada
             if (isSingleFinger && attemptNumber < SINGLE_FINGER_MAX_ATTEMPTS) {
               console.warn(
                 `[WebsocketTransport] Intento ${attemptNumber} de captura de dedo individual falló, reintentando en ${SINGLE_FINGER_RETRY_DELAY_MS}ms:`,
@@ -465,7 +486,7 @@
       // programada (ver nota de captureGeneration) -- sin esto, el setTimeout pendiente de la
       // captura recién cancelada disparaba un intento más, chocando con la captura del siguiente
       // dedo (confirmado en hardware 2026-09-16: dos cadenas de "Intento N" corriendo a la vez).
-      captureGeneration++;
+      ctx.invalidateCaptureGeneration();
       reply(null, 0, "");
     },
     aw_fingerprint_capture_get_captured_image(ctx, args, channel, reply) {
