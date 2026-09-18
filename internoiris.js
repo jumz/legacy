@@ -40,7 +40,10 @@ $('#btnGuardar').click(function()
         mostrarError("No se encontró iris capturado");
         return false;
     }
-    else if(irisEstaVacio(iris_izquierdo))
+    // Antes no revisaba el modo -- disparaba este error también en modo "right" (donde
+    // iris_izquierdo SIEMPRE está vacío a propósito), aunque el ojo derecho sí se hubiera
+    // capturado bien. Solo aplica para el modo "left".
+    else if($("#irisMode").val()=="left" && irisEstaVacio(iris_izquierdo))
     {
         mostrarError("No se encontró iris capturado");
                 return false;
@@ -79,7 +82,10 @@ $('#btnGuardarContinuar').click(function()
         mostrarError("No se encontró iris capturado");
         return false;
     }
-    else if(irisEstaVacio(iris_izquierdo))
+    // Antes no revisaba el modo -- disparaba este error también en modo "right" (donde
+    // iris_izquierdo SIEMPRE está vacío a propósito), aunque el ojo derecho sí se hubiera
+    // capturado bien. Solo aplica para el modo "left".
+    else if($("#irisMode").val()=="left" && irisEstaVacio(iris_izquierdo))
     {
         mostrarError("No se encontró iris capturado");
                 return false;
