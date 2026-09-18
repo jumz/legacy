@@ -1,5 +1,18 @@
 
 
+// El <img> del placeholder se renderiza con $path_app + la ruta relativa (ver internoiris.php:
+// "<?php echo $path_app; ?>js/Common/IrisComponent/images/empty_image_white.png"), es decir con
+// el dominio completo delante (https://<host>/js/...) -- comparar contra el literal
+// "/js/Common/IrisComponent/images/empty_image_white.png" (sin dominio) nunca daba match, así
+// que esta detección de "ojo sin capturar" estaba muerta desde siempre: para el modo de un solo
+// ojo, el <img> del ojo NO capturado se enviaba tal cual (la URL del placeholder, no una imagen)
+// a guardarIris/guardarIrisContinuar, causando el error genérico del servidor. Mismo criterio ya
+// aplicado del lado de PHP en internoiris.inc.php (strpos en vez de comparación exacta).
+function irisEstaVacio(src)
+{
+    return !src || src.indexOf('empty_image_white.png') !== -1;
+}
+
 $('#btnGuardar').click(function()
 {
     var id_interno = $('#id_interno').val();
@@ -8,34 +21,34 @@ $('#btnGuardar').click(function()
     var imagenes = $('#resultados img');
     var arreglo = [];
     var arreglo_capturas = [];
-    if (iris_izquierdo == '/js/Common/IrisComponent/images/empty_image_white.png' && iris_derecho == '/js/Common/IrisComponent/images/empty_image_white.png') 
+    if (irisEstaVacio(iris_izquierdo) && irisEstaVacio(iris_derecho))
     {
         mostrarError("No se encontraron iris capturados");
         return false;
     }
-    
+
     if($("#irisMode").val()=="both")
     {
-        if (iris_izquierdo == '/js/Common/IrisComponent/images/empty_image_white.png' || iris_derecho == '/js/Common/IrisComponent/images/empty_image_white.png') 
+        if (irisEstaVacio(iris_izquierdo) || irisEstaVacio(iris_derecho))
         {
             mostrarError("Falta una captura.");
             return false;
         }
     }
-    else if($("#irisMode").val()=="right" && iris_derecho == '/js/Common/IrisComponent/images/empty_image_white.png')
+    else if($("#irisMode").val()=="right" && irisEstaVacio(iris_derecho))
     {
         mostrarError("No se encontró iris capturado");
         return false;
     }
-    else if(iris_izquierdo == '/js/Common/IrisComponent/images/empty_image_white.png')
+    else if(irisEstaVacio(iris_izquierdo))
     {
         mostrarError("No se encontró iris capturado");
                 return false;
     }
-    
-    
+
+
     mostrarEspera();
-    xajax_guardarIris(id_interno, arreglo_capturas, iris_izquierdo, iris_derecho); 
+    xajax_guardarIris(id_interno, arreglo_capturas, iris_izquierdo, iris_derecho);
 });
 
 $('#btnGuardarContinuar').click(function()
@@ -47,37 +60,37 @@ $('#btnGuardarContinuar').click(function()
     var arreglo = [];
     var siguiente_paso = $('#siguiente_paso').val();
     var arreglo_capturas = [];
-    if (iris_izquierdo == '/js/Common/IrisComponent/images/empty_image_white.png' && iris_derecho == '/js/Common/IrisComponent/images/empty_image_white.png') 
+    if (irisEstaVacio(iris_izquierdo) && irisEstaVacio(iris_derecho))
     {
         mostrarError("No se encontraron iris capturados");
         return false;
     }
-    
+
     if($("#irisMode").val()=="both")
     {
-        if (iris_izquierdo == '/js/Common/IrisComponent/images/empty_image_white.png' || iris_derecho == '/js/Common/IrisComponent/images/empty_image_white.png') 
+        if (irisEstaVacio(iris_izquierdo) || irisEstaVacio(iris_derecho))
         {
             mostrarError("Falta una captura.");
             return false;
         }
     }
-    else if($("#irisMode").val()=="right" && iris_derecho == '/js/Common/IrisComponent/images/empty_image_white.png')
+    else if($("#irisMode").val()=="right" && irisEstaVacio(iris_derecho))
     {
         mostrarError("No se encontró iris capturado");
         return false;
     }
-    else if(iris_izquierdo == '/js/Common/IrisComponent/images/empty_image_white.png')
+    else if(irisEstaVacio(iris_izquierdo))
     {
         mostrarError("No se encontró iris capturado");
                 return false;
     }
-    
-    
+
+
     mostrarEspera();
     xajax_guardarIrisContinuar(id_interno, arreglo_capturas, iris_izquierdo, iris_derecho, siguiente_paso);
 
 
-     
+
 });
 
 

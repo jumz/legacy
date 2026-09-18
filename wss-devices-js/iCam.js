@@ -651,6 +651,13 @@ class TD100Client {
             case "capture.result":
                 console.log("[iCam][DIAG] capture.result recibido:", msg.requestId,
                     (msg.images || []).map(i => ({ label: i.label, format: i.format, base64Len: (i.base64 || "").length })));
+                // Mensaje de un intento YA ABANDONADO (ver nota junto a "error" abajo) -- se
+                // descarta en vez de aplicarlo, por las dudas de que llegue tarde en vez de un
+                // error (poco probable, pero el mismo riesgo aplica en ambos sentidos).
+                if (msg.requestId && msg.requestId !== this._previewRequestId) {
+                    console.log("[iCam][DIAG] descartado (requestId obsoleto):", msg.requestId);
+                    break;
+                }
                 if (this.autoFaceUIActive || this._autoFaceCapturing) {
                     this._handleAutoFaceCaptureResult(msg);
                 } else {
@@ -660,6 +667,21 @@ class TD100Client {
 
             case "error":
                 console.log("[iCam][DIAG] error recibido:", msg.requestId, msg.code, msg.message);
+                // Confirmado en consola (2026-09-18): el timeout LOCAL de este cliente
+                // (captureTimeoutMs, 6s) es más corto que el timeout real del servidor
+                // (CAPTURE_TIMEOUT_MS en config.env, 20s por defecto) -- si el servidor tarda más
+                // de 6s en responder, el cliente ya reintentó (nuevo requestId) antes de que
+                // llegue la respuesta tardía del intento viejo. Sin este chequeo, esa respuesta
+                // tardía se aplicaba como si fuera del intento ACTUAL: en un caso real, una
+                // captura de iris exitosa (intento 2) quedaba sobrescrita por un error tardío del
+                // intento 1 (CAPTURE_TIMEOUT), lo que a su vez disparaba un tercer intento
+                // innecesario que chocaba con el hardware todavía ocupado por el intento 2 recién
+                // exitoso (IrisImageCaptureFail) -- ver captureGeneration en WebsocketTransport.js
+                // para el mismo tipo de problema ya resuelto del lado de huella.
+                if (msg.requestId && msg.requestId !== this._previewRequestId) {
+                    console.log("[iCam][DIAG] descartado (requestId obsoleto):", msg.requestId);
+                    break;
+                }
                 if (this.autoFaceUIActive || this._autoFaceCapturing) {
                     this._autoFaceRetryOrFail();
                     break;
