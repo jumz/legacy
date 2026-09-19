@@ -17,14 +17,44 @@ var missingFingers = [];
 var captureComponent;
 var setComponent;
 
+// Antes, si el WebSocket nunca lograba abrir (p.ej. BiometricBridge.App no está corriendo en
+// esta computadora), no había onerror/onclose -- el estado se quedaba pegado para siempre en
+// "Creando websocket..." sin ninguna pista de qué hacer. wsAbrioAlgunaVez distingue "nunca
+// conectó" (mensaje: revisa el servicio) de "se cayó después de conectar" (mensaje: se perdió la
+// conexión); wsFalloNotificado evita mostrar el aviso dos veces cuando onerror y onclose llegan
+// juntos (lo normal para una conexión rechazada -- primero "error", luego "close").
+var wsAbrioAlgunaVez = false;
+var wsFalloNotificado = false;
+
+function avisarWsNoConecto() {
+    wsFalloNotificado = true;
+    statusElement.innerText = "No se pudo conectar con BiometricBridge.";
+    mostrarError("No se pudo conectar con BiometricBridge en esta computadora. Verifica que el servicio esté corriendo (busca su ícono junto al reloj, en la bandeja del sistema) y vuelve a cargar esta página.");
+}
+
 function connect() {
     mostrarEspera();
     statusElement.innerText = "Creando websocket...";
+    wsAbrioAlgunaVez = false;
+    wsFalloNotificado = false;
     // Puerto de WSS-DEVICES (config.env, CAM_PORT) -- el original apuntaba al puerto por
     // default del backend nativo de Aware (2080). Debe coincidir con el que ya usan
     // internorostro.js/internoiris.js (cámara y huella comparten el mismo puerto).
     websocket = new WebSocket("ws://localhost:20008");
+    websocket.onerror = function (event) {
+        avisarWsNoConecto();
+    };
+    websocket.onclose = function (event) {
+        if (wsFalloNotificado) return; // onerror ya avisó -- no repetirlo
+        if (!wsAbrioAlgunaVez) {
+            avisarWsNoConecto(); // onclose llegó sin onerror -- caso raro, mismo aviso de todos modos
+            return;
+        }
+        statusElement.innerText = "Se perdió la conexión con BiometricBridge.";
+        mostrarError("Se perdió la conexión con BiometricBridge. Verifica que el servicio siga corriendo e intenta de nuevo.");
+    };
     websocket.onopen = function (event) {
+        wsAbrioAlgunaVez = true;
         var transport = createWebsocketTransport(websocket);
         statusElement.innerText = "Creando componente de captura...";
         createFingerprintCapture(transport, "FingerprintCapture").then(function (captureComponentValue) {
