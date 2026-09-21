@@ -17,6 +17,21 @@ include(FOLDER_HTML . 'include/header.php');
     padding-bottom: 8px;
     margin-bottom: 20px;
   }
+  /* El frame de la cámara no siempre llega con la misma resolución (vista previa normal vs.
+     el modo de búsqueda de ojos durante una captura/reintento de iris) -- con img-fluid solo
+     (max-width:100%, height:auto) el <img> se mostraba a su tamaño NATIVO cada vez, achicándose
+     o agrandándose con cada cambio de estado y corriendo el selector "Ojo a capturar" de abajo,
+     dificultando darle clic (reportado 2026-09-20). Se fija un tamaño de caja constante con
+     object-fit:contain -- el frame que llegue se ajusta ADENTRO sin recortarse ni deformarse, y
+     el resto de la página ya no se mueve.
+  */
+  #photoImage {
+    width: 100%;
+    max-width: 640px;
+    height: 360px;
+    object-fit: contain;
+    background-color: #000;
+  }
 </style>
 <input type="hidden" id="id_interno" value="<?php echo $_POST['id']; ?>" />
 <input type="hidden" id="siguiente_paso" value="<?php echo $siguiente; ?>?id=<?php echo $_POST['id']; ?>" />
