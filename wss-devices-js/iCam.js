@@ -570,6 +570,10 @@ class TD100Client {
         if (isHtml) this.statusLabel.innerHTML = text;
         else this.statusLabel.textContent = text;
         this.statusLabel.className = "badge bg-" + color;
+        // Algunas páginas (ver internoiris.php) recortan este badge con text-overflow:ellipsis
+        // para que un mensaje largo no corra el resto del layout -- el title deja el texto
+        // completo disponible al pasar el mouse, sin depender de si el HTML es texto plano.
+        if (!isHtml) this.statusLabel.title = text;
     }
 
     markBusy(ms = 5000) {

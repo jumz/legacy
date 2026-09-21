@@ -32,6 +32,21 @@ include(FOLDER_HTML . 'include/header.php');
     object-fit: contain;
     background-color: #000;
   }
+  /* Mismo problema que #photoImage, pero en el renglón de arriba: los mensajes de estado
+     largos ("Reintentando... (Fallo de captura reportado por la cámara: ...)") hacían crecer
+     este badge sin límite, empujando el texto "Cámara:" y corriendo el selector "Ojo a
+     capturar"/botón "Capturar" de abajo (reportado 2026-09-21). Se fija un ancho máximo con
+     elipsis -- el mensaje se recorta visualmente (el texto completo sigue disponible en el log
+     de consola [iCam][DIAG] para diagnóstico), pero el layout ya no se mueve.
+  */
+  #camStatus {
+    display: inline-block;
+    max-width: 130px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    vertical-align: bottom;
+  }
 </style>
 <input type="hidden" id="id_interno" value="<?php echo $_POST['id']; ?>" />
 <input type="hidden" id="siguiente_paso" value="<?php echo $siguiente; ?>?id=<?php echo $_POST['id']; ?>" />
