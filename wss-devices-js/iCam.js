@@ -299,9 +299,13 @@ class TD100Client {
                 return;
             }
 
-            // Live se congeló mientras se esperaba (posible captura colgada)
+            // Live se congeló mientras se esperaba (posible captura colgada, o simplemente el
+            // bucle de reintento de iris cerró la vista previa mientras espera el siguiente
+            // intento -- ver "AUTO CAPTURA DE IRIS"). Antes esto borraba el último frame a un
+            // SVG gris ("Live detenido") -- pedido explícito (2026-09-21): dejar el último frame
+            // visible en vez de ponerlo en blanco; el status ya avisa que el live está pausado,
+            // sin necesidad de tapar la imagen.
             if (now - this.lastLiveTs > this.liveTimeoutMs && this.isBusy) {
-                this.resetLive();
                 this.setStatus("Live detenido", "warning");
             }
 
