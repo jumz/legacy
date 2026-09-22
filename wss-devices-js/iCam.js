@@ -1063,7 +1063,14 @@ class TD100Client {
         }
 
         try {
-            if (this.autoFaceImg) this.autoFaceImg.src = "data:" + this._mimeForFormat(faceImage.format) + ";base64," + faceImage.base64;
+            const dataUri = "data:" + this._mimeForFormat(faceImage.format) + ";base64," + faceImage.base64;
+            if (this.autoFaceImg) this.autoFaceImg.src = dataUri;
+            // faceImg es el slot de "resultado final" (mismo que usa la captura manual) --
+            // antes solo se llenaba autoFaceImg, así que una página que configure autoFaceImg y
+            // faceImg como elementos DISTINTOS (ver internorostro.js) puede mostrar autoFaceImg
+            // como visor en vivo de la búsqueda y faceImg como la foto definitiva, en vez de
+            // mezclar ambos usos en el mismo <img>.
+            if (this.faceImg) this.faceImg.src = dataUri;
             this.addHistory("Auto rostro", faceImage.base64, faceImage.format);
         } catch (ex) {
             console.error("[iCam] Error mostrando imagen de AutoFace:", ex);
