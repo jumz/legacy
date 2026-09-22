@@ -10,6 +10,20 @@ Permiso: Agregar
 require($_SERVER['DOCUMENT_ROOT'] . '/include/authenticate.php');
 include(FOLDER_HTML . 'include/header.php');
 ?>
+<style>
+  /* Mismo problema que ya se corrigió en internoiris.php: img-fluid sin tamaño fijo muestra el
+     <img> a su resolución NATIVA, que cambia entre la vista previa idle y AutoFace -- crecía o
+     achicaba el recuadro con cada cambio de estado (reportado 2026-09-22). Se fija una caja
+     constante con object-fit:contain para que el tamaño sea el mismo que al cargar la página.
+  */
+  #photoImage {
+    width: 100%;
+    max-width: 640px;
+    height: 360px;
+    object-fit: contain;
+    background-color: #000;
+  }
+</style>
 <input type="hidden" id="aware_desactivado" />
 <input type="hidden" id="primera_vez" />
 <input type="hidden" id="id_interno" value="<?php echo $_POST['id']; ?>" />
