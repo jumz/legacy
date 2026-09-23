@@ -45,6 +45,8 @@ const cam = new TD100Client({
     //sceneImg: document.getElementById("sceneImage"),
     statusLabel: document.getElementById("camStatus"),
     //historyContainer: document.getElementById("captureHistory")
+    faceGuideOuterEl: document.getElementById("faceGuideOuter"),
+    faceGuideInnerEl: document.getElementById("faceGuideInner"),
 });
 
 // ============================================================

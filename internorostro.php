@@ -23,6 +23,30 @@ include(FOLDER_HTML . 'include/header.php');
     object-fit: contain;
     background-color: #000;
   }
+  /* Recuadro guía de rostro sobre la vista previa en vivo, replicando en el navegador el mismo
+     recuadro que ya se manda a la LCD física de la TD200 (SetLCDFaceGuideBounds) -- pedido
+     explícito del usuario, 2026-09-22/23. #photoImageWrap envuelve exactamente la caja visible
+     de #photoImage (por eso el margen que antes tenía el <img> se movió aquí) para que los
+     recuadros, posicionados en porcentaje y centrados, coincidan con el encuadre real. El ancho
+     alto exactos los fija JS (iCam.js, _applyFaceGuideBox) según CAM_FACE_INNER_*/OUTER_* de
+     config.env -- aquí solo se define la apariencia común de ambos recuadros.
+  */
+  #photoImageWrap {
+    position: relative;
+    display: inline-block;
+  }
+  .face-guide-box {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    border: 2px solid;
+    box-sizing: border-box;
+    pointer-events: none;
+    display: none;
+  }
+  #faceGuideOuter { border-color: #ffffff; }
+  #faceGuideInner { border-color: #28a745; }
 </style>
 <input type="hidden" id="aware_desactivado" />
 <input type="hidden" id="primera_vez" />
@@ -69,7 +93,11 @@ include(FOLDER_HTML . 'include/header.php');
         <div class="row">
           
           <div class="col-sm-12 text-center">
-            <img id="photoImage" src="" class="img-fluid rounded m-2 border border-1 border-secondary">
+            <div id="photoImageWrap" class="m-2">
+              <img id="photoImage" src="" class="img-fluid rounded border border-1 border-secondary">
+              <div id="faceGuideOuter" class="face-guide-box"></div>
+              <div id="faceGuideInner" class="face-guide-box"></div>
+            </div>
           </div>
           
           

@@ -81,6 +81,14 @@ class TD100Client {
         this.irisLeftImg = config.irisLeftImg;
         this.sceneImg = config.sceneImg;
 
+        // Recuadro guía de rostro sobre la vista previa en vivo (replica en el navegador el
+        // mismo recuadro que ya se manda a la LCD física de la TD200 vía
+        // SetLCDFaceGuideBounds/ShowLCDFaceGuide) -- opcionales, páginas que no los configuren
+        // simplemente no ven el overlay. Ver _applyFaceGuideBox.
+        this.faceGuideOuterEl = config.faceGuideOuterEl || null;
+        this.faceGuideInnerEl = config.faceGuideInnerEl || null;
+        this.faceGuideBox = null;
+
         // Status
         this.statusLabel = config.statusLabel;
         this.historyContainer = config.historyContainer || null;
@@ -632,6 +640,7 @@ class TD100Client {
 
             case "device.list": {
                 const entry = (msg.devices || []).find(d => d.key === "camera");
+                this._applyFaceGuideBox(entry ? entry.faceGuideBox : null);
                 this._applyCameraStatus(entry ? entry.status : "Disconnected");
                 break;
             }
@@ -721,6 +730,38 @@ class TD100Client {
                 this._resumeIdlePreview();
                 this.setStatus(msg.message || "Error de captura", "danger");
                 break;
+        }
+    }
+
+    // box = FaceGuideBoxDto del servidor ({innerWidth, innerHeight, outerWidth, outerHeight,
+    // referenceWidth, referenceHeight}) o null. Las medidas son PROPORCIONALES a
+    // referenceWidth/Height (1600x1200, la resolución de la foto final confirmada en el sample
+    // oficial del fabricante) -- se traducen a porcentaje del <img> de vista previa en vez de
+    // píxeles absolutos, porque el frame en vivo puede llegar en una resolución distinta a la
+    // de la foto final (mismo encuadre/aspecto, se asume). Los elementos de overlay son
+    // opcionales (config.faceGuideOuterEl/faceGuideInnerEl) -- páginas que no los configuren no
+    // ven nada, sin romper nada. Pedido explícito del usuario, 2026-09-22/23.
+    _applyFaceGuideBox(box) {
+        this.faceGuideBox = box || null;
+
+        if (!box) {
+            if (this.faceGuideOuterEl) this.faceGuideOuterEl.style.display = "none";
+            if (this.faceGuideInnerEl) this.faceGuideInnerEl.style.display = "none";
+            return;
+        }
+
+        const refW = box.referenceWidth || 1600;
+        const refH = box.referenceHeight || 1200;
+
+        if (this.faceGuideOuterEl) {
+            this.faceGuideOuterEl.style.width = (box.outerWidth / refW * 100) + "%";
+            this.faceGuideOuterEl.style.height = (box.outerHeight / refH * 100) + "%";
+            this.faceGuideOuterEl.style.display = "block";
+        }
+        if (this.faceGuideInnerEl) {
+            this.faceGuideInnerEl.style.width = (box.innerWidth / refW * 100) + "%";
+            this.faceGuideInnerEl.style.height = (box.innerHeight / refH * 100) + "%";
+            this.faceGuideInnerEl.style.display = "block";
         }
     }
 
