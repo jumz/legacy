@@ -3,23 +3,28 @@
 
 
 
+// #finalImage se renderiza sin atributo src (ver internorostro.php) hasta que una captura real
+// lo llena -- $('#finalImage').attr('src') devuelve undefined en ese caso, no '', y
+// undefined.length tronaba con "Cannot read properties of undefined" antes de siquiera mostrar
+// el mensaje de "no hay foto capturada" (confirmado en consola, 2026-09-22: el clic en
+// "Guardar"/"Guardar y Continuar" se caía en silencio sin avisar nada al operador).
 $('#btnGuardar').click(function(){
     var id_interno = $('#id_interno').val();
     var imagen = $('#finalImage').attr('src');
-    if(imagen.length<2048)
+    if(!imagen || imagen.length<2048)
     {
         mostrarError("No se encontró rosto capturado");
         return false;
-    }     
+    }
     mostrarEspera();
-    xajax_guardarRostro(id_interno, imagen); 
+    xajax_guardarRostro(id_interno, imagen);
 });
 
 $('#btnGuardarContinuar').click(function(){
     var id_interno = $('#id_interno').val();
     var imagen = $('#finalImage').attr('src');
     var siguiente_paso = $('#siguiente_paso').val();
-    if(imagen.length<2048)
+    if(!imagen || imagen.length<2048)
     {
         mostrarError("No se encontró rosto capturado");
         return false;

@@ -1,7 +1,10 @@
+// #finalImage se renderiza sin atributo src hasta que una captura real lo llena --
+// $('#finalImage').attr('src') devuelve undefined en ese caso, no '' (mismo bug confirmado en
+// internorostro.js, 2026-09-22).
 $('#btnGuardar').click(function(){
     var id_interno = $('#id_interno').val();
     var imagen = $('#finalImage').attr('src');
-    if(imagen.length<2048)
+    if(!imagen || imagen.length<2048)
     {
         mostrarError("No se encontró rosto capturado");
         return false;
@@ -14,7 +17,7 @@ $('#btnGuardarContinuar').click(function(){
     var id_interno = $('#id_interno').val();
     var imagen = $('#finalImage').attr('src');
     var siguiente_paso = $('#siguiente_paso').val();
-    if(imagen.length<2048)
+    if(!imagen || imagen.length<2048)
     {
         mostrarError("No se encontró rosto capturado");
         return false;
