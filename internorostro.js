@@ -35,19 +35,11 @@ $('#btnGuardarContinuar').click(function(){
 
 
 
-// autoFaceImg apunta al mismo <img> que liveImg ("Captura") -- iCam.js nunca actualiza liveImg
-// mientras autoFace está activo (manda los frames por autoFaceImg en su lugar), así que antes
-// "Captura" se quedaba congelado durante toda la búsqueda mientras "Resultados" (finalImage)
-// recibía el video en vivo Y la foto final mezclados en el mismo elemento (reportado
-// 2026-09-22). Con este cambio + el de iCam.js (_handleAutoFaceCaptureResult también llena
-// faceImg), "Captura" muestra el video en vivo de la búsqueda de principio a fin, y
-// "Resultados" solo recibe la foto definitiva al terminar -- igual que ya hace la captura
-// manual (ver internorostromanual.js).
 const cam = new TD100Client({
     wsUrl: "ws://localhost:20008/",
     liveImg: document.getElementById("photoImage"),
-    faceImg: document.getElementById("finalImage"),
-    autoFaceImg: document.getElementById("photoImage"),
+    //faceImg: document.getElementById("faceCapture"),
+    autoFaceImg: document.getElementById("finalImage"),
     //irisRightImg: document.getElementById("irisRight"),
     //irisLeftImg: document.getElementById("irisLeft"),
     //sceneImg: document.getElementById("sceneImage"),
