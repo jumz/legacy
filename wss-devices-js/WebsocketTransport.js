@@ -493,7 +493,11 @@
       attemptCapture(1);
 
       function attemptCapture(attemptNumber) {
-        if (!ctx.isCurrentCaptureGeneration(generation)) return; // superado por una cancelación u otra captura
+        console.log(`[WebsocketTransport][diag] attemptCapture(${attemptNumber}) hand=${hand} generation=${generation} currentGeneration=${ctx.isCurrentCaptureGeneration(generation)}`); // diagnóstico temporal 2026-09-24
+        if (!ctx.isCurrentCaptureGeneration(generation)) {
+          console.log(`[WebsocketTransport][diag] attemptCapture(${attemptNumber}) descartado: generación superada`); // diagnóstico temporal 2026-09-24
+          return; // superado por una cancelación u otra captura
+        }
         ctx.pushEvent(channel, "aw_fingerprint_capture_autocapture_status_updated", [AUTOCAPTURE_STATUS_CAPTURING]);
         ctx
           .captureReal(hand)
@@ -516,7 +520,11 @@
             reply(null, 0, "");
           })
           .catch((err) => {
-            if (!ctx.isCurrentCaptureGeneration(generation)) return; // esta cadena ya fue superada
+            console.log(`[WebsocketTransport][diag] catch de attemptCapture(${attemptNumber}): err=`, err && err.message, `generation=${generation} currentGeneration=${ctx.isCurrentCaptureGeneration(generation)} maxAttempts=${CAPTURE_MAX_ATTEMPTS}`); // diagnóstico temporal 2026-09-24
+            if (!ctx.isCurrentCaptureGeneration(generation)) {
+              console.log(`[WebsocketTransport][diag] catch de attemptCapture(${attemptNumber}) descartado: generación superada, NO reintenta`); // diagnóstico temporal 2026-09-24
+              return; // esta cadena ya fue superada
+            }
             if (attemptNumber < CAPTURE_MAX_ATTEMPTS) {
               console.warn(
                 `[WebsocketTransport] Intento ${attemptNumber} de captura (${hand}) falló, reintentando en ${CAPTURE_RETRY_DELAY_MS}ms:`,
@@ -526,6 +534,7 @@
               setTimeout(() => attemptCapture(attemptNumber + 1), CAPTURE_RETRY_DELAY_MS);
               return;
             }
+            console.log(`[WebsocketTransport][diag] attemptCapture: se agotaron los ${CAPTURE_MAX_ATTEMPTS} intentos, se reporta ABORTED`); // diagnóstico temporal 2026-09-24
             ctx.pushEvent(channel, "aw_fingerprint_capture_autocapture_status_updated", [AUTOCAPTURE_STATUS_ABORTED]);
             reply(null, -1, err && err.message ? err.message : "Error de captura");
           });
