@@ -89,6 +89,14 @@ class TD100Client {
         this.faceGuideInnerEl = config.faceGuideInnerEl || null;
         this.faceGuideBox = null;
 
+        // Reposiciona el recuadro contra el tamaño REAL del video (ver _positionFaceGuideBoxes)
+        // en cada frame nuevo -- naturalWidth/Height del <img> solo son confiables después de
+        // "load" -- y también si la ventana cambia de tamaño (layouts angostos).
+        if (this.liveImg) {
+            this.liveImg.addEventListener("load", () => this._positionFaceGuideBoxes());
+        }
+        window.addEventListener("resize", () => this._positionFaceGuideBoxes());
+
         // Status
         this.statusLabel = config.statusLabel;
         this.historyContainer = config.historyContainer || null;
@@ -734,35 +742,63 @@ class TD100Client {
     }
 
     // box = FaceGuideBoxDto del servidor ({innerWidth, innerHeight, outerWidth, outerHeight,
-    // referenceWidth, referenceHeight}) o null. Las medidas son PROPORCIONALES a
-    // referenceWidth/Height (1600x1200, la resolución de la foto final confirmada en el sample
-    // oficial del fabricante) -- se traducen a porcentaje del <img> de vista previa en vez de
-    // píxeles absolutos, porque el frame en vivo puede llegar en una resolución distinta a la
-    // de la foto final (mismo encuadre/aspecto, se asume). Los elementos de overlay son
-    // opcionales (config.faceGuideOuterEl/faceGuideInnerEl) -- páginas que no los configuren no
-    // ven nada, sin romper nada. Pedido explícito del usuario, 2026-09-22/23.
+    // referenceWidth, referenceHeight}) o null. Los elementos de overlay son opcionales
+    // (config.faceGuideOuterEl/faceGuideInnerEl) -- páginas que no los configuren no ven nada,
+    // sin romper nada. Pedido explícito del usuario, 2026-09-22/23.
     _applyFaceGuideBox(box) {
         this.faceGuideBox = box || null;
+        this._positionFaceGuideBoxes();
+    }
 
-        if (!box) {
+    // Calcula la posición/tamaño reales del recuadro guía en píxeles, contra el rectángulo que
+    // el video REALMENTE ocupa dentro de #photoImage -- no contra la caja completa del <img>.
+    // #photoImage usa object-fit:contain con un tamaño fijo (ver internorostro.php): si el video
+    // nativo tiene una proporción distinta a esa caja, se dibuja centrado y más chico, con
+    // barras negras rellenando el resto. Medir el recuadro como porcentaje de la caja completa
+    // (la versión anterior) lo dejaba desalineado con el video real -- confirmado en pantalla,
+    // 2026-09-23: ni el tamaño ni la posición coincidían con el recorte real de la cámara, y
+    // probablemente por eso la foto final tampoco salía centrada (el operador se alineaba
+    // contra un recuadro visualmente incorrecto). Se llama de nuevo en cada frame nuevo (evento
+    // "load" del <img>, donde naturalWidth/Height ya reflejan la resolución real) y en resize,
+    // por si la caja cambia de tamaño en pantallas angostas.
+    _positionFaceGuideBoxes() {
+        const box = this.faceGuideBox;
+        if (!box || !this.faceGuideOuterEl || !this.faceGuideInnerEl || !this.liveImg) {
             if (this.faceGuideOuterEl) this.faceGuideOuterEl.style.display = "none";
             if (this.faceGuideInnerEl) this.faceGuideInnerEl.style.display = "none";
             return;
         }
 
+        const naturalW = this.liveImg.naturalWidth;
+        const naturalH = this.liveImg.naturalHeight;
+        if (!naturalW || !naturalH) return; // todavía no cargó ningún frame real -- nada que medir
+
+        const wrapperRect = this.liveImg.getBoundingClientRect();
+        const wrapperW = wrapperRect.width;
+        const wrapperH = wrapperRect.height;
+        if (!wrapperW || !wrapperH) return;
+
+        const scale = Math.min(wrapperW / naturalW, wrapperH / naturalH);
+        const contentW = naturalW * scale;
+        const contentH = naturalH * scale;
+        const contentLeft = (wrapperW - contentW) / 2;
+        const contentTop = (wrapperH - contentH) / 2;
+
         const refW = box.referenceWidth || 1600;
         const refH = box.referenceHeight || 1200;
 
-        if (this.faceGuideOuterEl) {
-            this.faceGuideOuterEl.style.width = (box.outerWidth / refW * 100) + "%";
-            this.faceGuideOuterEl.style.height = (box.outerHeight / refH * 100) + "%";
-            this.faceGuideOuterEl.style.display = "block";
-        }
-        if (this.faceGuideInnerEl) {
-            this.faceGuideInnerEl.style.width = (box.innerWidth / refW * 100) + "%";
-            this.faceGuideInnerEl.style.height = (box.innerHeight / refH * 100) + "%";
-            this.faceGuideInnerEl.style.display = "block";
-        }
+        const place = (el, boxW, boxH) => {
+            const w = (boxW / refW) * contentW;
+            const h = (boxH / refH) * contentH;
+            el.style.left = (contentLeft + (contentW - w) / 2) + "px";
+            el.style.top = (contentTop + (contentH - h) / 2) + "px";
+            el.style.width = w + "px";
+            el.style.height = h + "px";
+            el.style.display = "block";
+        };
+
+        place(this.faceGuideOuterEl, box.outerWidth, box.outerHeight);
+        place(this.faceGuideInnerEl, box.innerWidth, box.innerHeight);
     }
 
     _applyCameraStatus(status) {

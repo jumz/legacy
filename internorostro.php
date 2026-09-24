@@ -26,10 +26,13 @@ include(FOLDER_HTML . 'include/header.php');
   /* Recuadro guía de rostro sobre la vista previa en vivo, replicando en el navegador el mismo
      recuadro que ya se manda a la LCD física de la TD200 (SetLCDFaceGuideBounds) -- pedido
      explícito del usuario, 2026-09-22/23. #photoImageWrap envuelve exactamente la caja visible
-     de #photoImage (por eso el margen que antes tenía el <img> se movió aquí) para que los
-     recuadros, posicionados en porcentaje y centrados, coincidan con el encuadre real. El ancho
-     alto exactos los fija JS (iCam.js, _applyFaceGuideBox) según CAM_FACE_INNER_*/OUTER_* de
-     config.env -- aquí solo se define la apariencia común de ambos recuadros.
+     de #photoImage (por eso el margen que antes tenía el <img> se movió aquí). La posición y
+     tamaño EXACTOS (left/top/width/height en píxeles) los fija JS en cada frame
+     (iCam.js, _positionFaceGuideBoxes) contra el rectángulo real que ocupa el video dentro de
+     #photoImage (que usa object-fit:contain -- el video puede ser más chico que la caja
+     completa, con barras negras a los lados) -- aquí solo se define la apariencia común de
+     ambos recuadros, no su posición (corregido 2026-09-23: un porcentaje centrado sobre la caja
+     completa quedaba desalineado con el video real).
   */
   #photoImageWrap {
     position: relative;
@@ -37,9 +40,6 @@ include(FOLDER_HTML . 'include/header.php');
   }
   .face-guide-box {
     position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
     border: 2px solid;
     box-sizing: border-box;
     pointer-events: none;
