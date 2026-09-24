@@ -653,7 +653,7 @@ class TD100Client {
                 this.lastLiveTs = Date.now();
 
                 if (this.autoFaceUIActive) {
-                    this._autoFaceCheckFrame(msg.base64);
+                    this._autoFaceCheckFrame(msg.base64, msg.range);
                     break;
                 }
 
@@ -1050,9 +1050,24 @@ class TD100Client {
     // Downscale a un canvas oculto (48x36) + diferencia media de luminancia contra el frame
     // anterior. Por debajo del umbral varios frames seguidos = "la persona está quieta" ->
     // dispara una captura real. Ver nota de calibración al inicio del archivo.
-    _autoFaceCheckFrame(base64) {
+    //
+    // "range" (2026-09-23): señal NATIVA de distancia que ya manda la cámara (mismo mecanismo
+    // que usa iris para "acércate/aléjate/perfecto", y que el LED físico de la cámara refleja
+    // como ámbar->verde cuando el modo armado es FaceCrop) -- si ya llega "operating" (a la
+    // distancia correcta), dispara la captura de inmediato en vez de esperar a que la heurística
+    // de quietud la detecte por su cuenta. Pedido explícito del usuario -- sin confirmar todavía
+    // en hardware real si FaceCrop realmente reporta este rango para rostro (antes solo se había
+    // confirmado para iris); si nunca llega, el comportamiento cae de vuelta a la heurística de
+    // quietud de siempre, sin romper nada.
+    _autoFaceCheckFrame(base64, range) {
         if (this.autoFaceImg) this.autoFaceImg.src = "data:image/jpeg;base64," + base64;
         if (this._autoFaceCapturing) return; // ya se disparó una captura, esperando resultado
+
+        if (range === "operating") {
+            console.log("[iCam][DIAG] autoFace: range nativo 'operating' -- disparando captura");
+            this._autoFaceTriggerCapture();
+            return;
+        }
 
         const img = new Image();
         img.onload = () => {
