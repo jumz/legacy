@@ -165,25 +165,30 @@
   // de "por qué" falló (los que sí existen son sobre calidad/posición de dedo, que este puente
   // no distingue) -- usar el genérico en vez de fabricar una razón que no se puede confirmar.
 
-  // Reintento automático de captura de dedo individual (ver nota en
-  // aw_fingerprint_capture_start_auto_capture) -- 30 intentos x 2s = 60s de margen antes de
-  // reportar el fallo al wiring, tiempo de sobra para que el operador limpie el sensor o
-  // corrija la técnica de rodado entre intentos.
-  const SINGLE_FINGER_RETRY_DELAY_MS = 2000;
-  const SINGLE_FINGER_MAX_ATTEMPTS = 30;
+  // Reintento automático de captura (ver nota en aw_fingerprint_capture_start_auto_capture) --
+  // 30 intentos x 2s = 60s de margen antes de reportar el fallo al wiring, tiempo de sobra para
+  // que el operador limpie el sensor o corrija la técnica de rodado/colocación entre intentos.
+  //
+  // Generalizado de "solo dedo individual" a CUALQUIER impresión (2026-09-24): originalmente
+  // solo cubría dedo individual (internohuellasindividual.php/internohuellasroladas.php) --
+  // el usuario reportó que un -115 transitorio en pulgares (internohuellas.php, slap, no dedo
+  // individual) obligaba a reiniciar las 10 huellas completas porque los slaps nunca tuvieron
+  // este reintento. Se generaliza a mano izquierda/derecha/pulgares también.
+  const CAPTURE_RETRY_DELAY_MS = 2000;
+  const CAPTURE_MAX_ATTEMPTS = 30;
 
   // Muestra el progreso del reintento en la pantalla del operador. Se escribe directo sobre
-  // el <span id="status"> que ya usan internohuellasindividual.php/internohuellasroladas.php
-  // (en vez de pasar por el wiring script) por la misma razón del comentario de arriba: ese
-  // <span> vive en un archivo que sí se despliega de forma confiable (este adaptador), a
-  // diferencia de los wiring scripts. Sin esto, el operador solo veía "Capturando..." fijo
-  // durante hasta 60s de reintentos silenciosos, sin saber que debía retirar y volver a
-  // colocar el dedo.
+  // el <span id="status"> que ya usan internohuellas.php/internohuellasindividual.php/
+  // internohuellasroladas.php (en vez de pasar por el wiring script) por la misma razón del
+  // comentario de arriba: ese <span> vive en un archivo que sí se despliega de forma confiable
+  // (este adaptador), a diferencia de los wiring scripts. Sin esto, el operador solo veía
+  // "Capturando..." fijo durante hasta 60s de reintentos silenciosos, sin saber que debía
+  // retirar y volver a colocar el dedo/mano.
   function showRetryStatus(attemptNumber) {
     const statusElement = document.getElementById("status");
     if (!statusElement) return;
     statusElement.innerText =
-      `Reintentando (intento ${attemptNumber} de ${SINGLE_FINGER_MAX_ATTEMPTS})... retira el dedo por completo y vuelve a colocarlo.`;
+      `Reintentando (intento ${attemptNumber} de ${CAPTURE_MAX_ATTEMPTS})... retira el dedo/mano por completo y vuelve a colocarlo.`;
   }
 
   // Funciones propietarias de Aware sin equivalente real en RealScan/RS_SDK -- responden error
@@ -454,8 +459,8 @@
       }
       const hand = info.kind === "slap" ? info.hand : info.kind === "single_rolled" ? "single_rolled" : "single";
 
-      // Reintento automático para dedo individual (plano/rodado) SOLO dentro del adaptador --
-      // no en los wiring scripts (internohuellasroladas.js/internohuellasindividual.js): esos
+      // Reintento automático SOLO dentro del adaptador -- no en los wiring scripts
+      // (internohuellas.js/internohuellasroladas.js/internohuellasindividual.js): esos
       // archivos se cargan desde una ruta cuya caché (nunca identificada con certeza -- no es
       // CDN, no es nginx, no son múltiples servidores) sirve copias viejas de forma persistente,
       // incluso con recarga forzada, incógnita nueva, y el servidor confirmado con el archivo
@@ -464,15 +469,17 @@
       // razón. Aquí, en cambio, SÍ llega siempre: este archivo se carga con ?v=... para forzar
       // frescura, y las pruebas ya confirmaron que ese mecanismo funciona.
       //
-      // Motivo del reintento: con 10 capturas de dedo individual independientes en fila, cada
-      // una con algo de probabilidad de fallar (RS_ERR_FINGER_EXIST/-116, RS_ERR_SENSOR_DIRTY/
-      // -115, etc.), la única forma de continuar tras un fallo era "Reiniciar captura" en el
-      // wiring -- que borra TODO el progreso y recarga la página desde el primer dedo. Esto
-      // hacía casi imposible completar la secuencia completa (confirmado en hardware
-      // 2026-09-15). Reintentando aquí, el wiring nunca se entera de los intentos fallidos
-      // individuales -- solo ve el resultado final, exitoso o (tras agotar los reintentos)
-      // fallido.
-      const isSingleFinger = info.kind === "single_flat" || info.kind === "single_rolled";
+      // Motivo del reintento: con 10 capturas independientes en fila (dedo individual o slap
+      // de mano), cada una con algo de probabilidad de fallar (RS_ERR_FINGER_EXIST/-116,
+      // RS_ERR_SENSOR_DIRTY/-115, etc.), la única forma de continuar tras un fallo era
+      // "Reiniciar captura" en el wiring -- que borra TODO el progreso y recarga la página
+      // desde el primer dedo/mano. Esto hacía casi imposible completar la secuencia completa
+      // (confirmado en hardware 2026-09-15 para dedo individual, y de nuevo 2026-09-24 para
+      // slaps de mano/pulgares -- el usuario tuvo que reiniciar las 10 huellas completas por
+      // un -115 aislado en pulgares). Reintentando aquí, el wiring nunca se entera de los
+      // intentos fallidos individuales -- solo ve el resultado final, exitoso o (tras agotar
+      // los reintentos) fallido. Aplica por igual a dedo individual y a slap de mano -- ya no
+      // se distingue por tipo de impresión.
       // Ver la nota de captureGeneration arriba -- una captura nueva siempre invalida cualquier
       // cadena de reintento anterior que hubiera quedado viva (por ejemplo, si el wiring canceló
       // el dedo anterior y pasó a este sin que el setTimeout pendiente de ese dedo se enterara).
@@ -510,13 +517,13 @@
           })
           .catch((err) => {
             if (!ctx.isCurrentCaptureGeneration(generation)) return; // esta cadena ya fue superada
-            if (isSingleFinger && attemptNumber < SINGLE_FINGER_MAX_ATTEMPTS) {
+            if (attemptNumber < CAPTURE_MAX_ATTEMPTS) {
               console.warn(
-                `[WebsocketTransport] Intento ${attemptNumber} de captura de dedo individual falló, reintentando en ${SINGLE_FINGER_RETRY_DELAY_MS}ms:`,
+                `[WebsocketTransport] Intento ${attemptNumber} de captura (${hand}) falló, reintentando en ${CAPTURE_RETRY_DELAY_MS}ms:`,
                 err && err.message
               );
               showRetryStatus(attemptNumber);
-              setTimeout(() => attemptCapture(attemptNumber + 1), SINGLE_FINGER_RETRY_DELAY_MS);
+              setTimeout(() => attemptCapture(attemptNumber + 1), CAPTURE_RETRY_DELAY_MS);
               return;
             }
             ctx.pushEvent(channel, "aw_fingerprint_capture_autocapture_status_updated", [AUTOCAPTURE_STATUS_ABORTED]);
