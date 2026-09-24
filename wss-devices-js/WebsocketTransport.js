@@ -223,6 +223,35 @@
     // capture.cancel real en vez de ser un no-op. Ver nota en aw_fingerprint_capture_end_auto_capture.
     let currentCaptureRequestId = null;
 
+    // Vista previa de huella (2026-09-24, pedido explícito del usuario): una sola suscripción
+    // por transporte, SIN requestId (fingerprint.preview.start/stop no lo llevan -- ver
+    // WSS-DEVICES, DeviceManager.OpenFingerprintPreview, independiente de cualquier captura en
+    // curso). El API de Aware usa un modelo "pídeme el siguiente frame cuando quieras"
+    // (requestNextPreviewImage) -- se respeta ese mismo patrón: cada fingerprint.preview.frame
+    // que llega de WSS-DEVICES se entrega SOLO si hay una solicitud pendiente; si no, se
+    // descarta (WSS-DEVICES empuja frames tan rápido como el sensor los produce, sin
+    // backpressure real).
+    let fingerprintPreviewStarted = false;
+    let pendingPreviewRequest = null; // { channel } o null
+
+    function ensureFingerprintPreviewStarted() {
+      if (fingerprintPreviewStarted) return;
+      fingerprintPreviewStarted = true;
+      sendToBridge({ type: "fingerprint.preview.start" });
+    }
+
+    function stopFingerprintPreview() {
+      if (!fingerprintPreviewStarted) return;
+      fingerprintPreviewStarted = false;
+      pendingPreviewRequest = null;
+      sendToBridge({ type: "fingerprint.preview.stop" });
+    }
+
+    function requestNextPreviewFrame(channel) {
+      ensureFingerprintPreviewStarted();
+      pendingPreviewRequest = { channel };
+    }
+
     // Invalida cadenas de reintento de dedo individual que quedaron huérfanas -- confirmado en
     // hardware 2026-09-16: cancelCurrentCapture() (end_auto_capture) manda capture.cancel real,
     // pero el setTimeout ya programado dentro de attemptCapture() no se enteraba y disparaba OTRO
@@ -255,6 +284,14 @@
         pendingByRequestId.delete(msg.requestId);
         if (currentCaptureRequestId === msg.requestId) currentCaptureRequestId = null;
         pending.reject(new Error(msg.message || msg.code || "Error de captura"));
+      } else if (msg.type === "fingerprint.preview.frame") {
+        if (pendingPreviewRequest) {
+          const { channel } = pendingPreviewRequest;
+          pendingPreviewRequest = null;
+          pushEvent(channel, "aw_fingerprint_capture_preview_image_updated", [msg.base64]);
+        }
+        // Sin solicitud pendiente: se descarta -- el cliente todavía no pidió el siguiente
+        // frame (ver nota de fingerprintPreviewStarted arriba).
       }
       // "device.status"/"device.list" no tienen equivalente en el protocolo de Aware que estas
       // páginas consuman directamente -- si idms_legacy necesita mostrar estado de conexión,
@@ -331,6 +368,8 @@
       nextCaptureGeneration,
       isCurrentCaptureGeneration,
       invalidateCaptureGeneration,
+      requestNextPreviewFrame,
+      stopFingerprintPreview,
     };
 
     function dispatch(fn, args, channel, reply) {
@@ -387,6 +426,7 @@
     },
     aw_fingerprint_capture_destroy(ctx, args, channel, reply) {
       ctx.captureCache.delete(channel);
+      ctx.stopFingerprintPreview();
       reply(null, 0, "");
     },
     aw_fingerprint_capture_open_device(ctx, args, channel, reply) {
@@ -395,6 +435,7 @@
       reply(true, 0, "");
     },
     aw_fingerprint_capture_close(ctx, args, channel, reply) {
+      ctx.stopFingerprintPreview();
       reply(null, 0, "");
     },
 
@@ -431,6 +472,12 @@
       // cadena de reintento anterior que hubiera quedado viva (por ejemplo, si el wiring canceló
       // el dedo anterior y pasó a este sin que el setTimeout pendiente de ese dedo se enterara).
       const generation = ctx.nextCaptureGeneration();
+      // Vista previa del sensor -- Aware documenta que el primer preview_image_updated llega
+      // automático al iniciar la captura, sin que el wiring tenga que pedirlo explícitamente
+      // (requestNextPreviewImage solo hace falta para los frames SIGUIENTES, ya que
+      // internohuellas.js lo pide de nuevo dentro de su propio callback onPreviewImage). Pedido
+      // explícito del usuario, 2026-09-24 -- sin confirmar en hardware real.
+      ctx.requestNextPreviewFrame(channel);
       attemptCapture(1);
 
       function attemptCapture(attemptNumber) {
@@ -487,6 +534,7 @@
       // captura recién cancelada disparaba un intento más, chocando con la captura del siguiente
       // dedo (confirmado en hardware 2026-09-16: dos cadenas de "Intento N" corriendo a la vez).
       ctx.invalidateCaptureGeneration();
+      ctx.stopFingerprintPreview();
       reply(null, 0, "");
     },
     aw_fingerprint_capture_get_captured_image(ctx, args, channel, reply) {
@@ -498,6 +546,14 @@
       reply(null, 0, "");
     },
     aw_fingerprint_capture_reset_missing_fingers(ctx, args, channel, reply) {
+      reply(null, 0, "");
+    },
+    // Modelo "pídeme el siguiente frame cuando quieras" de Aware -- ver la nota junto a
+    // fingerprintPreviewStarted en createWebsocketTransport. El frame en sí NO llega como
+    // return_value de esta llamada (Aware solo la resuelve como confirmación) -- llega después,
+    // por separado, vía aw_fingerprint_capture_preview_image_updated.
+    aw_fingerprint_capture_request_next_preview_image(ctx, args, channel, reply) {
+      ctx.requestNextPreviewFrame(channel);
       reply(null, 0, "");
     },
 
