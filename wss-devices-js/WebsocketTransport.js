@@ -237,6 +237,7 @@
     function ensureFingerprintPreviewStarted() {
       if (fingerprintPreviewStarted) return;
       fingerprintPreviewStarted = true;
+      console.log("[fingerprint-preview][diag] enviando fingerprint.preview.start"); // diagnóstico temporal 2026-09-24
       sendToBridge({ type: "fingerprint.preview.start" });
     }
 
@@ -250,6 +251,7 @@
     function requestNextPreviewFrame(channel) {
       ensureFingerprintPreviewStarted();
       pendingPreviewRequest = { channel };
+      console.log("[fingerprint-preview][diag] esperando el siguiente frame para canal", channel); // diagnóstico temporal 2026-09-24
     }
 
     // Invalida cadenas de reintento de dedo individual que quedaron huérfanas -- confirmado en
@@ -288,7 +290,10 @@
         if (pendingPreviewRequest) {
           const { channel } = pendingPreviewRequest;
           pendingPreviewRequest = null;
+          console.log("[fingerprint-preview][diag] frame recibido y entregado al canal", channel); // diagnóstico temporal 2026-09-24
           pushEvent(channel, "aw_fingerprint_capture_preview_image_updated", [msg.base64]);
+        } else {
+          console.log("[fingerprint-preview][diag] frame recibido pero SIN solicitud pendiente -- se descarta"); // diagnóstico temporal 2026-09-24
         }
         // Sin solicitud pendiente: se descarta -- el cliente todavía no pidió el siguiente
         // frame (ver nota de fingerprintPreviewStarted arriba).
