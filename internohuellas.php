@@ -42,7 +42,7 @@ include(FOLDER_HTML . 'include/header.php');
           <div class="col-sm-4">
             <?php foreach ($huellas_a_capturar as $huella) { ?>
               <div class="custom-checkbox">
-                <input type="checkbox" class="substituted huellas omision <?php echo $huella['campo']; ?>" id="<?php echo $huella['campo']; ?>" checked="" disabled="disabled">
+                <input type="checkbox" class="substituted huellas omision <?php echo $huella['campo']; ?>" id="<?php echo $huella['campo']; ?>" checked="">
                 <label for="<?php echo $huella['campo']; ?>"><?php echo $huella['nombre']; ?></label>
               </div>
             <?php } ?>
@@ -97,6 +97,10 @@ include(FOLDER_HTML . 'include/header.php');
               #huellasDiagrama .hand-shape { fill: #f6d3b8; stroke: #d3a077; stroke-width: 2; }
               #huellasDiagrama .led-dot { fill: rgba(255,255,255,0.45); stroke: #8a8a8a; stroke-width: 2; transition: fill 0.2s, stroke 0.2s; }
               #huellasDiagrama .led-dot.activo { fill: #28a745; stroke: #1e7e34; }
+              /* Declarado DESPUÉS de .activo a propósito: un dedo omitido debe verse rojo aunque
+                 su grupo esté activo en ese momento (misma prioridad que se les da a los LEDs
+                 físicos: rojo el que falta, verde los que siguen pidiéndose). */
+              #huellasDiagrama .led-dot.omitido { fill: #dc3545; stroke: #a52834; }
             </style>
             <script>
               // MutationObserver sobre #prompt en vez de tocar internohuellas.js -- ese
@@ -134,6 +138,41 @@ include(FOLDER_HTML . 'include/header.php');
                   new MutationObserver(actualizarDiagrama).observe(promptEl, { childList: true, characterData: true, subtree: true });
                 }
                 actualizarDiagrama();
+              })();
+
+              // Refleja en rojo, sobre el mismo diagrama, los checkboxes que el operador
+              // desmarcó (dedo omitido) -- pedido explícito del usuario, 2026-09-25. Propio de
+              // esta página, no toca internohuellas.js: los checkboxes ya no están
+              // deshabilitados (ver el foreach de arriba), pero el envío real de qué dedos se
+              // omiten al puente lo maneja WebsocketTransport.js (aw_fingerprint_capture_set_
+              // finger_missing), no este script -- esto es solo el reflejo visual.
+              (function () {
+                var CHECKBOX_TO_DOT = {
+                  menique_mano_izquierda: 'dotLeftLittle',
+                  anular_mano_izquierda: 'dotLeftRing',
+                  medio_mano_izquierda: 'dotLeftMiddle',
+                  indice_mano_izquierda: 'dotLeftIndex',
+                  pulgar_mano_izquierda: 'dotThumbLeft',
+                  menique_mano_derecha: 'dotRightLittle',
+                  anular_mano_derecha: 'dotRightRing',
+                  medio_mano_derecha: 'dotRightMiddle',
+                  indice_mano_derecha: 'dotRightIndex',
+                  pulgar_mano_derecha: 'dotThumbRight'
+                };
+                function actualizarOmitido(checkboxId) {
+                  var dotId = CHECKBOX_TO_DOT[checkboxId];
+                  if (!dotId) return;
+                  var dot = document.getElementById(dotId);
+                  var checkbox = document.getElementById(checkboxId);
+                  if (!dot || !checkbox) return;
+                  dot.classList.toggle('omitido', !checkbox.checked);
+                }
+                Object.keys(CHECKBOX_TO_DOT).forEach(function (checkboxId) {
+                  var checkbox = document.getElementById(checkboxId);
+                  if (!checkbox) return;
+                  actualizarOmitido(checkboxId);
+                  checkbox.addEventListener('change', function () { actualizarOmitido(checkboxId); });
+                });
               })();
             </script>
           </div>

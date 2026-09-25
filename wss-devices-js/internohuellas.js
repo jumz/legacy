@@ -173,10 +173,13 @@ function onPreviewQualityScore (impressionString, afiqScore) {
 
 /**
  * Returns the finger positions that contained in the current impression
+ * (o en `impression`, si se pasa explícito -- pedido explícito del usuario, 2026-09-25, para
+ * poder consultar la impresión de CUALQUIER grupo, no solo la armada ahora mismo, y así saltar
+ * grupos completamente omitidos antes de armarlos).
  * @returns {*}
  */
-function getPositions(){
-    var impression = impressionsToCapture[impressionsIndex];
+function getPositions(impression){
+    if (impression === undefined) impression = impressionsToCapture[impressionsIndex];
     if (impression === FingerprintCaptureApi.Impression.PLAIN_RIGHT_FOUR_FINGERS){
        return [
            FingerprintCaptureApi.Finger.RIGHT_INDEX_FINGER,
@@ -211,10 +214,30 @@ function registerCallbacks() {
     captureComponent.setCapturedImageUpdated(onCapturedImage);
 }
 
+// Un grupo (mano izquierda/derecha/pulgares) está completamente omitido cuando TODOS los
+// dedos que le corresponden están en missingFingers (checkbox desmarcado) -- pedido explícito
+// del usuario, 2026-09-25: "si se omite toda una lectura ... va a pasar directo a la mano
+// derecha". Reutiliza getPositions(impression) y el mismo arreglo missingFingers que ya
+// consume getSegments() (poblado ahora también desde el checkbox handler de abajo, no solo
+// desde onMarkMissing).
+function isImpressionFullyOmitted(impression) {
+    var positions = getPositions(impression);
+    if (positions.length === 0) return false;
+    for (var i = 0; i < positions.length; i++) {
+        if (missingFingers.indexOf(positions[i]) === -1) return false;
+    }
+    return true;
+}
+
 function startPreview() {
     qualityScores.clear();
     ocultarMensaje();
     previewScoreElement.innerText ="";
+    // Salta cualquier grupo completamente omitido ANTES de armarlo -- ver
+    // isImpressionFullyOmitted arriba.
+    while (impressionsIndex < impressionsToCapture.length && isImpressionFullyOmitted(impressionsToCapture[impressionsIndex])) {
+        impressionsIndex++;
+    }
     if (impressionsIndex < impressionsToCapture.length) {
         var impression = impressionsToCapture[impressionsIndex];
         promptElement.innerText = FingerprintCaptureApi.Impression[impression];
@@ -290,13 +313,67 @@ document.addEventListener("DOMContentLoaded", function () {
     connect();
 });
 
+// Checkbox de cada dedo (ver internohuellas.php, ya no disabled) -> código
+// FingerprintCaptureApi.Finger correspondiente -- pedido explícito del usuario, 2026-09-25
+// ("me gustaría que también se pudieran omitir"). Mismos ids reales confirmados en el handler
+// análogo de internohuellasindividual.js ($('.huellas').click).
+var CHECKBOX_TO_FINGER = {
+    menique_mano_izquierda: FingerprintCaptureApi.Finger.LEFT_LITTLE_FINGER,
+    anular_mano_izquierda: FingerprintCaptureApi.Finger.LEFT_RING_FINGER,
+    medio_mano_izquierda: FingerprintCaptureApi.Finger.LEFT_MIDDLE_FINGER,
+    indice_mano_izquierda: FingerprintCaptureApi.Finger.LEFT_INDEX_FINGER,
+    pulgar_mano_izquierda: FingerprintCaptureApi.Finger.LEFT_THUMB,
+    menique_mano_derecha: FingerprintCaptureApi.Finger.RIGHT_LITTLE_FINGER,
+    anular_mano_derecha: FingerprintCaptureApi.Finger.RIGHT_RING_FINGER,
+    medio_mano_derecha: FingerprintCaptureApi.Finger.RIGHT_MIDDLE_FINGER,
+    indice_mano_derecha: FingerprintCaptureApi.Finger.RIGHT_INDEX_FINGER,
+    pulgar_mano_derecha: FingerprintCaptureApi.Finger.RIGHT_THUMB
+};
+
+$('.huellas').click(function () {
+    var checkboxId = $(this).attr('id');
+    var fingerCode = CHECKBOX_TO_FINGER[checkboxId];
+    if (fingerCode === undefined) return;
+    var isChecked = $(this).is(':checked');
+
+    // Mismo arreglo que ya consume getSegments() (antes solo lo poblaba onMarkMissing) --
+    // desmarcar agrega el código, marcar lo quita.
+    if (isChecked) {
+        var idx = missingFingers.indexOf(fingerCode);
+        if (idx !== -1) missingFingers.splice(idx, 1);
+    } else if (missingFingers.indexOf(fingerCode) === -1) {
+        missingFingers.push(fingerCode);
+    }
+
+    // WebsocketTransport.js traduce esto a `omittedFingers` para el puente real (ver
+    // aw_fingerprint_capture_set_finger_missing) -- antes eran no-ops puros.
+    setComponent.setFingerMissing(fingerCode, !isChecked).then(function () {
+        return captureComponent.setFingerMissing(fingerCode, !isChecked);
+    });
+
+    // Si el grupo que se está armando/capturando AHORA MISMO quedó completamente omitido,
+    // cancela esa captura y salta directo al siguiente grupo -- pedido explícito del usuario:
+    // "va a pasar directo a la mano derecha". Si el grupo completado no es el actual, ya queda
+    // registrado en missingFingers y se salta solo cuando le toque su turno (ver
+    // isImpressionFullyOmitted en startPreview), sin interrumpir nada.
+    if (isImpressionFullyOmitted(impressionsToCapture[impressionsIndex])) {
+        captureComponent.endAutoCapture().then(function () {
+            startPreview();
+        });
+    }
+});
+
 $('#btnGuardar').click(function(){
     var id_interno = $('#id_interno').val();
     var imagenes = $('#resultados img');
-    if($('#resultados img').length<=0){
+    // Antes bloqueaba si no había NINGUNA imagen, sin importar el motivo -- ahora, si el
+    // operador omitió deliberadamente los 10 dedos (0 checkboxes marcados), debe poder
+    // continuar de todas formas. Pedido explícito del usuario, 2026-09-25: "en el caso de que
+    // se omitan todos los dedos debe poder dar siguiente hasta el siguiente paso".
+    if($('#resultados img').length<=0 && $('#contenedor_captura_huellas input:checked').length>0){
         mostrarError("No se encontraron huellas capturadas");
         return false;
-    }    
+    }
     var arreglo = [];
     $.each( imagenes, function( key, value ) {
       arreglo.push($(this).attr('src'));
@@ -317,7 +394,8 @@ $('#btnGuardarContinuar').click(function(){
     var id_interno = $('#id_interno').val();
     var imagenes = $('#resultados img');
     var siguiente_paso = $('#siguiente_paso').val();
-    if($('#resultados img').length<=0){
+    // Ver nota análoga en btnGuardar -- permite continuar si el operador omitió los 10 dedos.
+    if($('#resultados img').length<=0 && $('#contenedor_captura_huellas input:checked').length>0){
         mostrarError("No se encontraron huellas capturadas");
         return false;
     }

@@ -149,6 +149,41 @@
     return IMPRESSION_INFO[impression] || { kind: "unsupported" };
   }
 
+  // FingerprintCaptureApi.Finger (aw_fingerprint_capture.js:222-249) -> nombre ISO exacto, el
+  // mismo que ya usa el puente (FingerLabels/ParseSingleFingerLed) -- pedido explícito del
+  // usuario, 2026-09-25, para omitir dedos específicos en captura de mano completa. Valores
+  // confirmados leyendo ese enum completo, no inferidos.
+  const FINGER_CODE_TO_ISO = {
+    1: "right_thumb",
+    2: "right_index",
+    3: "right_middle",
+    4: "right_ring",
+    5: "right_little",
+    6: "left_thumb",
+    7: "left_index",
+    8: "left_middle",
+    9: "left_ring",
+    10: "left_little",
+  };
+
+  // Traduce el conjunto de códigos Finger marcados como ausentes (missingFingerCodes, ver
+  // createWebsocketTransport) a la lista de nombres ISO que corresponden a la mano/pulgares que
+  // se está por capturar -- descarta códigos de la OTRA mano (ej. un dedo derecho marcado no
+  // debe afectar la captura de la mano izquierda).
+  function omittedFingersForHand(missingFingerCodes, channel, hand) {
+    const codes = missingFingerCodes.get(channel);
+    if (!codes || codes.size === 0) return [];
+    const result = [];
+    codes.forEach((code) => {
+      const iso = FINGER_CODE_TO_ISO[code];
+      if (!iso) return;
+      if (hand === "thumbs" && (iso === "left_thumb" || iso === "right_thumb")) result.push(iso);
+      else if (hand === "left" && iso.indexOf("left_") === 0 && iso !== "left_thumb") result.push(iso);
+      else if (hand === "right" && iso.indexOf("right_") === 0 && iso !== "right_thumb") result.push(iso);
+    });
+    return result;
+  }
+
   // Mismo sentinel que Aware ya usa para "no se pudo calcular" en getSegmentationQuality
   // (aw_fingerprint_set.js:1573-1605, códigos 254/255) -- se reutiliza para los scores/
   // funciones sin equivalente real, en vez de inventar un código nuevo.
@@ -239,6 +274,13 @@
     // Impresiones "presentes" reportadas por FingerprintSet.setFingerprintCaptureImage, por
     // canal de FingerprintSet: Map(impression number -> finger label)
     const setImpressions = new Map();
+    // Dedos marcados como ausentes por el operador (checkbox desmarcado), por canal:
+    // Map(channel -> Set(código FingerprintCaptureApi.Finger, 1-10)) -- pedido explícito del
+    // usuario, 2026-09-25 ("me gustaría que también se pudieran omitir"). Poblado por
+    // aw_fingerprint_capture_set_finger_missing/aw_fingerprint_capture_reset_missing_fingers
+    // (antes no-ops puros); leído por aw_fingerprint_capture_start_auto_capture para mandar
+    // omittedFingers al puente real solo cuando la impresión es un slap de mano/pulgares.
+    const missingFingerCodes = new Map();
     const pendingByRequestId = new Map(); // requestId -> { resolve, reject }
     // Único requestId de captura en vuelo (a lo mucho una a la vez -- el puente ya lo garantiza
     // con su propio candado por dispositivo) -- permite que endAutoCapture() mande un
@@ -334,13 +376,15 @@
     // requestId. `finger` es opcional (solo aplica a dedo individual plano/rodado -- ver
     // IMPRESSION_INFO, ya trae el nombre ISO exacto tipo "left_index") -- pedido explícito del
     // usuario, 2026-09-25, para que el puente pueda encender el LED del dedo específico, igual
-    // que ya hace con las manos completas en internohuellas.php.
-    function captureReal(hand, finger) {
+    // que ya hace con las manos completas en internohuellas.php. `omittedFingers` es opcional
+    // (solo aplica a hand="left"/"right"/"thumbs" -- ver omittedFingersForHand), lista de
+    // nombres ISO que el operador marcó como ausentes para ESTA mano.
+    function captureReal(hand, finger, omittedFingers) {
       return new Promise((resolve, reject) => {
         const requestId = uuid();
         currentCaptureRequestId = requestId;
         pendingByRequestId.set(requestId, { resolve, reject });
-        sendToBridge({ type: "fingerprint.capture", requestId, hand, finger });
+        sendToBridge({ type: "fingerprint.capture", requestId, hand, finger, omittedFingers });
       });
     }
 
@@ -394,6 +438,7 @@
       channels,
       captureCache,
       setImpressions,
+      missingFingerCodes,
       captureReal,
       cancelCurrentCapture,
       pushEvent,
@@ -482,6 +527,9 @@
         return;
       }
       const hand = info.kind === "slap" ? info.hand : info.kind === "single_rolled" ? "single_rolled" : "single";
+      // Solo aplica a slaps (mano/pulgares) -- ver omittedFingersForHand. Pedido explícito del
+      // usuario, 2026-09-25 ("me gustaría que también se pudieran omitir").
+      const omittedFingers = info.kind === "slap" ? omittedFingersForHand(ctx.missingFingerCodes, channel, hand) : [];
       // Ver nota de SLAP_MAX_ATTEMPTS arriba -- límite más bajo para slaps (mano/pulgares) que
       // para dedo individual, para acotar el peor caso si el sensor está persistentemente sucio
       // (no transitorio) en vez de martillarlo con hasta 30 intentos de hasta ~20s cada uno.
@@ -534,7 +582,7 @@
         if (!ctx.isCurrentCaptureGeneration(generation)) return; // superado por una cancelación u otra captura
         ctx.pushEvent(channel, "aw_fingerprint_capture_autocapture_status_updated", [AUTOCAPTURE_STATUS_CAPTURING]);
         ctx
-          .captureReal(hand, info.finger)
+          .captureReal(hand, info.finger, omittedFingers)
           .then((images) => {
             if (!ctx.isCurrentCaptureGeneration(generation)) return; // esta cadena ya fue superada
             const cache = ctx.captureCache.get(channel) || new Map();
@@ -611,10 +659,23 @@
       const entry = cache && cache.size > 0 ? Array.from(cache.values())[0] : null;
       reply(entry ? entry.base64 : null, entry ? 0 : -1, entry ? "" : "No hay imagen capturada.");
     },
+    // Antes eran no-ops puros -- pedido explícito del usuario, 2026-09-25, para poder omitir
+    // dedos específicos en captura de mano completa (4-4-2): ahora se registra el código de
+    // dedo (args[0], FingerprintCaptureApi.Finger 1-10) como ausente/presente (args[1]) para
+    // este canal. Leído por aw_fingerprint_capture_start_auto_capture (ver
+    // omittedFingersForHand) solo cuando la impresión armada es un slap -- no afecta dedo
+    // individual, que sigue resolviendo su propio missingFingers del lado del wiring script
+    // (internohuellasindividual.js/internohuellasroladas.js), sin depender de esto.
     aw_fingerprint_capture_set_finger_missing(ctx, args, channel, reply) {
+      const [fingerCode, missing] = args;
+      const codes = ctx.missingFingerCodes.get(channel) || new Set();
+      if (missing) codes.add(fingerCode);
+      else codes.delete(fingerCode);
+      ctx.missingFingerCodes.set(channel, codes);
       reply(null, 0, "");
     },
     aw_fingerprint_capture_reset_missing_fingers(ctx, args, channel, reply) {
+      ctx.missingFingerCodes.set(channel, new Set());
       reply(null, 0, "");
     },
     // Modelo "pídeme el siguiente frame cuando quieras" de Aware -- ver la nota junto a
