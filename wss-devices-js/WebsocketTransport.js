@@ -252,7 +252,6 @@
     function ensureFingerprintPreviewStarted() {
       if (fingerprintPreviewStarted) return;
       fingerprintPreviewStarted = true;
-      console.log("[fingerprint-preview][diag] enviando fingerprint.preview.start"); // diagnóstico temporal 2026-09-24
       sendToBridge({ type: "fingerprint.preview.start" });
     }
 
@@ -266,7 +265,6 @@
     function requestNextPreviewFrame(channel) {
       ensureFingerprintPreviewStarted();
       pendingPreviewRequest = { channel };
-      console.log("[fingerprint-preview][diag] esperando el siguiente frame para canal", channel); // diagnóstico temporal 2026-09-24
     }
 
     // Invalida cadenas de reintento de dedo individual que quedaron huérfanas -- confirmado en
@@ -302,16 +300,21 @@
         if (currentCaptureRequestId === msg.requestId) currentCaptureRequestId = null;
         pending.reject(new Error(msg.message || msg.code || "Error de captura"));
       } else if (msg.type === "fingerprint.preview.frame") {
+        // Antes: se entregaba UN frame por cada requestNextPreviewImage() y se descartaba
+        // cualquier otro que llegara mientras tanto -- el puente reenvía TODOS los frames
+        // nativos sin filtrar (ver SendFingerprintPreviewFrame, WSS-DEVICES), así que con ese
+        // modelo de "un frame por round-trip" se perdía la enorme mayoría, incluyendo
+        // frecuentemente el último antes de que la captura terminara (confirmado en hardware
+        // 2026-09-24: el live se congelaba mostrando un dedo suelto en vez de los 4 juntos).
+        // Ahora se entrega CUALQUIER frame que llegue mientras la vista previa siga armada
+        // (pendingPreviewRequest ya no se limpia aquí, solo en stopFingerprintPreview) -- el
+        // wiring de Aware sigue llamando requestNextPreviewImage() en su propio callback, pero
+        // aquí ya no hace falta esperarlo para seguir entregando: siempre se muestra el frame
+        // más reciente disponible.
         if (pendingPreviewRequest) {
           const { channel } = pendingPreviewRequest;
-          pendingPreviewRequest = null;
-          console.log("[fingerprint-preview][diag] frame recibido y entregado al canal", channel); // diagnóstico temporal 2026-09-24
           pushEvent(channel, "aw_fingerprint_capture_preview_image_updated", [msg.base64]);
-        } else {
-          console.log("[fingerprint-preview][diag] frame recibido pero SIN solicitud pendiente -- se descarta"); // diagnóstico temporal 2026-09-24
         }
-        // Sin solicitud pendiente: se descarta -- el cliente todavía no pidió el siguiente
-        // frame (ver nota de fingerprintPreviewStarted arriba).
       }
       // "device.status"/"device.list" no tienen equivalente en el protocolo de Aware que estas
       // páginas consuman directamente -- si idms_legacy necesita mostrar estado de conexión,
@@ -517,11 +520,7 @@
       setTimeout(() => attemptCapture(1), PREVIEW_WARMUP_MS);
 
       function attemptCapture(attemptNumber) {
-        console.log(`[WebsocketTransport][diag] attemptCapture(${attemptNumber}) hand=${hand} generation=${generation} currentGeneration=${ctx.isCurrentCaptureGeneration(generation)}`); // diagnóstico temporal 2026-09-24
-        if (!ctx.isCurrentCaptureGeneration(generation)) {
-          console.log(`[WebsocketTransport][diag] attemptCapture(${attemptNumber}) descartado: generación superada`); // diagnóstico temporal 2026-09-24
-          return; // superado por una cancelación u otra captura
-        }
+        if (!ctx.isCurrentCaptureGeneration(generation)) return; // superado por una cancelación u otra captura
         ctx.pushEvent(channel, "aw_fingerprint_capture_autocapture_status_updated", [AUTOCAPTURE_STATUS_CAPTURING]);
         ctx
           .captureReal(hand)
@@ -544,11 +543,7 @@
             reply(null, 0, "");
           })
           .catch((err) => {
-            console.log(`[WebsocketTransport][diag] catch de attemptCapture(${attemptNumber}): err=`, err && err.message, `generation=${generation} currentGeneration=${ctx.isCurrentCaptureGeneration(generation)} maxAttempts=${maxAttempts}`); // diagnóstico temporal 2026-09-24
-            if (!ctx.isCurrentCaptureGeneration(generation)) {
-              console.log(`[WebsocketTransport][diag] catch de attemptCapture(${attemptNumber}) descartado: generación superada, NO reintenta`); // diagnóstico temporal 2026-09-24
-              return; // esta cadena ya fue superada
-            }
+            if (!ctx.isCurrentCaptureGeneration(generation)) return; // esta cadena ya fue superada
             if (attemptNumber < maxAttempts) {
               console.warn(
                 `[WebsocketTransport] Intento ${attemptNumber} de captura (${hand}) falló, reintentando en ${CAPTURE_RETRY_DELAY_MS}ms:`,
@@ -558,7 +553,6 @@
               setTimeout(() => attemptCapture(attemptNumber + 1), CAPTURE_RETRY_DELAY_MS);
               return;
             }
-            console.log(`[WebsocketTransport][diag] attemptCapture: se agotaron los ${maxAttempts} intentos, se reporta ABORTED`); // diagnóstico temporal 2026-09-24
             ctx.pushEvent(channel, "aw_fingerprint_capture_autocapture_status_updated", [AUTOCAPTURE_STATUS_ABORTED]);
             reply(null, -1, err && err.message ? err.message : "Error de captura");
           });
