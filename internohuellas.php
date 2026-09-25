@@ -94,10 +94,15 @@ include(FOLDER_HTML . 'include/header.php');
             <script>
               // MutationObserver sobre #prompt en vez de tocar internohuellas.js -- ese
               // <span> ya lo llena el wiring existente
-              // (promptElement.innerText = FingerprintCaptureApi.Impression[impression],
-              // que produce literalmente "PLAIN_LEFT_FOUR_FINGERS"/"PLAIN_RIGHT_FOUR_FINGERS"/
-              // "PLAIN_DUAL_THUMBS" -- el nombre del enum, confirmado leyendo
-              // aw_fingerprint_capture.js). Sin confirmar todavía en hardware real.
+              // (promptElement.innerText = FingerprintCaptureApi.Impression[impression]).
+              // OJO: para PLAIN_LEFT_FOUR_FINGERS/PLAIN_RIGHT_FOUR_FINGERS/PLAIN_DUAL_THUMBS
+              // ese reverse-lookup NO da el nombre del enum -- da una etiqueta en español
+              // ("Mano izquierda"/"Mano derecha"/"Ambos pulgares", ver
+              // aw_fingerprint_capture.js:291-335). Por eso se compara contra el propio objeto
+              // FingerprintCaptureApi.Impression en vez de contra texto adivinado -- así sigue
+              // funcionando aunque cambien las etiquetas. Bug confirmado: la versión anterior
+              // (que comparaba contra "LEFT_FOUR"/"RIGHT_FOUR"/"THUMBS") nunca coincidía con nada
+              // y ningún dedo se pintaba de verde.
               (function () {
                 var promptEl = document.getElementById('prompt');
                 var groups = {
@@ -108,9 +113,12 @@ include(FOLDER_HTML . 'include/header.php');
                 function actualizarDiagrama() {
                   var texto = promptEl ? promptEl.textContent : '';
                   var activo = null;
-                  if (texto.indexOf('LEFT_FOUR') !== -1) activo = 'left';
-                  else if (texto.indexOf('RIGHT_FOUR') !== -1) activo = 'right';
-                  else if (texto.indexOf('THUMBS') !== -1) activo = 'thumbs';
+                  if (typeof FingerprintCaptureApi !== 'undefined') {
+                    var Impression = FingerprintCaptureApi.Impression;
+                    if (texto === Impression[Impression.PLAIN_LEFT_FOUR_FINGERS]) activo = 'left';
+                    else if (texto === Impression[Impression.PLAIN_RIGHT_FOUR_FINGERS]) activo = 'right';
+                    else if (texto === Impression[Impression.PLAIN_DUAL_THUMBS]) activo = 'thumbs';
+                  }
                   Object.keys(groups).forEach(function (key) {
                     if (!groups[key]) return;
                     groups[key].classList.toggle('activo', key === activo);
