@@ -554,6 +554,16 @@
             // (2026-09-25), para dejar de perseguir "cuál frame es el correcto": se manda un
             // PNG en blanco fijo -- el <img> del live queda vacío al completar, en vez de
             // mostrar cualquier dedo suelto.
+            //
+            // Confirmado en hardware (2026-09-25, misma tarde): el blanco SÍ se mostraba, pero
+            // un frame de vista previa que ya venía en camino desde el puente llegaba justo
+            // después y lo sobrescribía con una huella real -- para manos intermedias, la
+            // SIGUIENTE captura "tapaba" ese frame perdido con su propio live; para pulgares (la
+            // última impresión), nada vuelve a tocar el <img> después, así que se quedaba
+            // pegado en esa huella. Se detiene la vista previa ANTES de mandar el blanco --
+            // cualquier frame que llegue después ya no encuentra pendingPreviewRequest y se
+            // ignora (ver handleBridgeMessage).
+            ctx.stopFingerprintPreview();
             ctx.pushEvent(channel, "aw_fingerprint_capture_captured_image_updated", [BLANK_PREVIEW_IMAGE_BASE64]);
             ctx.pushEvent(channel, "aw_fingerprint_capture_autocapture_status_updated", [AUTOCAPTURE_STATUS_COMPLETED]);
             reply(null, 0, "");
