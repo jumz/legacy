@@ -296,7 +296,6 @@
       }
 
       if (msg.type === "capture.result" && msg.device === "fingerprint") {
-        console.log(`[diag] capture.result recibido requestId=${msg.requestId} @ ${performance.now().toFixed(1)}ms`); // diagnóstico temporal 2026-09-25
         const pending = pendingByRequestId.get(msg.requestId);
         if (!pending) return;
         pendingByRequestId.delete(msg.requestId);
@@ -319,7 +318,6 @@
         // wiring de Aware sigue llamando requestNextPreviewImage() en su propio callback, pero
         // aquí ya no hace falta esperarlo para seguir entregando: siempre se muestra el frame
         // más reciente disponible.
-        console.log(`[diag] fingerprint.preview.frame recibido @ ${performance.now().toFixed(1)}ms, pendingPreviewRequest=${!!pendingPreviewRequest}`); // diagnóstico temporal 2026-09-25
         if (pendingPreviewRequest) {
           const { channel } = pendingPreviewRequest;
           pushEvent(channel, "aw_fingerprint_capture_preview_image_updated", [msg.base64]);
@@ -565,7 +563,6 @@
             // pegado en esa huella. Se detiene la vista previa ANTES de mandar el blanco --
             // cualquier frame que llegue después ya no encuentra pendingPreviewRequest y se
             // ignora (ver handleBridgeMessage).
-            console.log(`[diag] éxito de captura (${hand}) -- deteniendo vista previa y mandando blanco @ ${performance.now().toFixed(1)}ms`); // diagnóstico temporal 2026-09-25
             ctx.stopFingerprintPreview();
             ctx.pushEvent(channel, "aw_fingerprint_capture_captured_image_updated", [BLANK_PREVIEW_IMAGE_BASE64]);
             ctx.pushEvent(channel, "aw_fingerprint_capture_autocapture_status_updated", [AUTOCAPTURE_STATUS_COMPLETED]);
