@@ -490,7 +490,16 @@
       // internohuellas.js lo pide de nuevo dentro de su propio callback onPreviewImage). Pedido
       // explícito del usuario, 2026-09-24 -- sin confirmar en hardware real.
       ctx.requestNextPreviewFrame(channel);
-      attemptCapture(1);
+      // Retraso deliberado (pedido explícito del usuario, 2026-09-24, para validar que el live
+      // SÍ llega a mostrarse): CaptureHandAsync (WSS-DEVICES) desregistra la vista previa nativa
+      // justo antes de RS_StartCapture -- sin esta pausa, `fingerprint.capture` sale casi al
+      // mismo tiempo que `fingerprint.preview.start`, y nunca alcanza a llegar ni un solo frame
+      // antes de que se suspenda. Con este margen, el usuario ve el live mientras acerca la
+      // mano/pulgares y recién entonces se arma la captura real (que sigue congelando el último
+      // frame durante su propia duración, como ya se acordó). Alarga cada captura ~1s. Sin
+      // confirmar todavía si 1000ms es suficiente para que se vea algo útil.
+      const PREVIEW_WARMUP_MS = 1000;
+      setTimeout(() => attemptCapture(1), PREVIEW_WARMUP_MS);
 
       function attemptCapture(attemptNumber) {
         console.log(`[WebsocketTransport][diag] attemptCapture(${attemptNumber}) hand=${hand} generation=${generation} currentGeneration=${ctx.isCurrentCaptureGeneration(generation)}`); // diagnóstico temporal 2026-09-24
