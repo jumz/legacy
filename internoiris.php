@@ -113,12 +113,12 @@ include(FOLDER_HTML . 'include/header.php');
 		            <tbody>
 		              
 		              <tr>
-		                <td style="width:50%">
+		                <td style="width:50%; padding-right:41px;">
 		                  <img id="iris_derecho_img" class="center-block img-fluid rounded m-2 border border-1 border-secondary" src="<?php echo $path_app; ?>js/Common/IrisComponent/images/empty_image_white.png" />
 		                </td>
-		                <td  style="width:50%">
+		                <td  style="width:50%; padding-left:42px;">
 		                <img id="iris_izquierdo_img" class="center-block img-fluid rounded m-2 border border-1 border-secondary" src="<?php echo $path_app; ?>js/Common/IrisComponent/images/empty_image_white.png" />
-		                  
+
 		                </td>
 		              </tr>
 		              <tr>
