@@ -78,7 +78,7 @@ include(FOLDER_HTML . 'include/header.php');
 <script src="<?php echo $path_app; ?>js/Common/lib/es6-promise/es6-promise.js"></script>
 <script src="<?php echo $path_app; ?>js/Common/lib/biocomponents/aw_fingerprint_capture.js"></script>
 <script src="<?php echo $path_app; ?>js/Common/lib/biocomponents/aw_fingerprint_set.js"></script>
-<script src="<?php echo $path_app; ?>js/Common/lib/biocomponents/WebsocketTransport.js?v=wssdevices4"></script>
+<script src="<?php echo $path_app; ?>js/Common/lib/biocomponents/WebsocketTransport.js?v=wssdevices5"></script>
 <script src="<?php echo $path_app; ?>js/Common/lib/biocomponents/ImpressionInfo.js"></script>
 <script src="<?php echo $path_app; ?>js/Common/lib/binary-file-saver/BinaryFileSaver.js"></script>
 <?php include(FOLDER_HTML . 'include/footer.php'); ?>
