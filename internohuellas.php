@@ -46,6 +46,80 @@ include(FOLDER_HTML . 'include/header.php');
                 <label for="<?php echo $huella['campo']; ?>"><?php echo $huella['nombre']; ?></label>
               </div>
             <?php } ?>
+
+            <!-- Diagrama ilustrativo de colocación de dedos -- pedido explícito del usuario
+                 (2026-09-25): resalta en verde el grupo (mano izquierda/pulgares/mano derecha)
+                 que se está pidiendo en cada momento, igual que los LEDs físicos del lector.
+                 Propio de esta página, no toca internohuellas.js -- observa el texto de
+                 "Capturando: ..." (id="prompt", que sí llena internohuellas.js) con un
+                 MutationObserver en vez de depender del wiring script. -->
+            <svg id="huellasDiagrama" viewBox="0 0 400 150" style="width:100%; max-width:360px; margin-top:16px;">
+              <g id="ledGroupLeft" class="led-group">
+                <text x="70" y="14" text-anchor="middle" font-size="11" fill="#666">Mano izquierda</text>
+                <circle class="led-dot" cx="10" cy="40" r="9"></circle>
+                <circle class="led-dot" cx="45" cy="40" r="9"></circle>
+                <circle class="led-dot" cx="80" cy="40" r="9"></circle>
+                <circle class="led-dot" cx="115" cy="40" r="9"></circle>
+                <text x="10" y="66" text-anchor="middle" font-size="9" fill="#666">Meñique</text>
+                <text x="45" y="66" text-anchor="middle" font-size="9" fill="#666">Anular</text>
+                <text x="80" y="66" text-anchor="middle" font-size="9" fill="#666">Medio</text>
+                <text x="115" y="66" text-anchor="middle" font-size="9" fill="#666">Índice</text>
+              </g>
+              <g id="ledGroupThumbs" class="led-group">
+                <text x="200" y="14" text-anchor="middle" font-size="11" fill="#666">Pulgares</text>
+                <circle class="led-dot" cx="182" cy="40" r="9"></circle>
+                <circle class="led-dot" cx="218" cy="40" r="9"></circle>
+                <text x="200" y="66" text-anchor="middle" font-size="9" fill="#666">Izq. / Der.</text>
+              </g>
+              <g id="ledGroupRight" class="led-group">
+                <text x="330" y="14" text-anchor="middle" font-size="11" fill="#666">Mano derecha</text>
+                <circle class="led-dot" cx="285" cy="40" r="9"></circle>
+                <circle class="led-dot" cx="320" cy="40" r="9"></circle>
+                <circle class="led-dot" cx="355" cy="40" r="9"></circle>
+                <circle class="led-dot" cx="390" cy="40" r="9"></circle>
+                <text x="285" y="66" text-anchor="middle" font-size="9" fill="#666">Índice</text>
+                <text x="320" y="66" text-anchor="middle" font-size="9" fill="#666">Medio</text>
+                <text x="355" y="66" text-anchor="middle" font-size="9" fill="#666">Anular</text>
+                <text x="390" y="66" text-anchor="middle" font-size="9" fill="#666">Meñique</text>
+              </g>
+              <text x="200" y="95" text-anchor="middle" font-size="10" fill="#999" id="huellasDiagramaLeyenda">Coloque los dedos indicados en verde</text>
+            </svg>
+            <style>
+              #huellasDiagrama .led-dot { fill: #e0e0e0; stroke: #b0b0b0; stroke-width: 1; transition: fill 0.2s; }
+              #huellasDiagrama .led-group.activo .led-dot { fill: #28a745; stroke: #1e7e34; }
+              #huellasDiagrama .led-group.activo text { fill: #1e7e34; font-weight: bold; }
+            </style>
+            <script>
+              // MutationObserver sobre #prompt en vez de tocar internohuellas.js -- ese
+              // <span> ya lo llena el wiring existente
+              // (promptElement.innerText = FingerprintCaptureApi.Impression[impression],
+              // que produce literalmente "PLAIN_LEFT_FOUR_FINGERS"/"PLAIN_RIGHT_FOUR_FINGERS"/
+              // "PLAIN_DUAL_THUMBS" -- el nombre del enum, confirmado leyendo
+              // aw_fingerprint_capture.js). Sin confirmar todavía en hardware real.
+              (function () {
+                var promptEl = document.getElementById('prompt');
+                var groups = {
+                  left: document.getElementById('ledGroupLeft'),
+                  thumbs: document.getElementById('ledGroupThumbs'),
+                  right: document.getElementById('ledGroupRight')
+                };
+                function actualizarDiagrama() {
+                  var texto = promptEl ? promptEl.textContent : '';
+                  var activo = null;
+                  if (texto.indexOf('LEFT_FOUR') !== -1) activo = 'left';
+                  else if (texto.indexOf('RIGHT_FOUR') !== -1) activo = 'right';
+                  else if (texto.indexOf('THUMBS') !== -1) activo = 'thumbs';
+                  Object.keys(groups).forEach(function (key) {
+                    if (!groups[key]) return;
+                    groups[key].classList.toggle('activo', key === activo);
+                  });
+                }
+                if (promptEl) {
+                  new MutationObserver(actualizarDiagrama).observe(promptEl, { childList: true, characterData: true, subtree: true });
+                }
+                actualizarDiagrama();
+              })();
+            </script>
           </div>
         </div>
       </div>
