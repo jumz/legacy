@@ -248,6 +248,13 @@
     // backpressure real).
     let fingerprintPreviewStarted = false;
     let pendingPreviewRequest = null; // { channel } o null
+    // Último frame de vista previa entregado (ver handleBridgeMessage) -- pedido explícito del
+    // usuario, 2026-09-24: internohuellas.js (onCapturedImage) reemplaza el <img> del live con
+    // la imagen que le llega en aw_fingerprint_capture_captured_image_updated (una huella YA
+    // segmentada, elegida como "representativa"), no con el último frame en vivo -- por eso el
+    // live "desaparecía" al completar la lectura. Se guarda aquí para reenviarlo como esa misma
+    // imagen "capturada" (ver attemptCapture más abajo), así el reemplazo no cambia lo que se ve.
+    let lastPreviewFrameBase64 = null;
 
     function ensureFingerprintPreviewStarted() {
       if (fingerprintPreviewStarted) return;
@@ -311,6 +318,7 @@
         // wiring de Aware sigue llamando requestNextPreviewImage() en su propio callback, pero
         // aquí ya no hace falta esperarlo para seguir entregando: siempre se muestra el frame
         // más reciente disponible.
+        lastPreviewFrameBase64 = msg.base64;
         if (pendingPreviewRequest) {
           const { channel } = pendingPreviewRequest;
           pushEvent(channel, "aw_fingerprint_capture_preview_image_updated", [msg.base64]);
@@ -393,6 +401,7 @@
       invalidateCaptureGeneration,
       requestNextPreviewFrame,
       stopFingerprintPreview,
+      getLastPreviewFrame: () => lastPreviewFrameBase64,
     };
 
     function dispatch(fn, args, channel, reply) {
@@ -532,12 +541,20 @@
             // capturedImageUpdated espera la imagen en base64 directamente, no un número de
             // impresión (confirmado en aw_fingerprint_capture.js:705-711: reenvía result.args
             // tal cual al callback del usuario, y el JSDoc de setCapturedImageUpdated dice
-            // "Callback with the captured image", mismo formato que la vista previa). RealScan
-            // no entrega una sola foto "cruda" del slap completo como una sola imagen -- ya
-            // viene segmentada por dedo -- así que se usa la primera imagen capturada como
-            // representativa para esta vista previa; el resultado real por dedo lo resuelve
-            // getSegments() en el wiring vía getSegmentedImage(), que sí lee del cache completo.
-            const preview = images.length > 0 ? images[0].base64 : null;
+            // "Callback with the captured image", mismo formato que la vista previa). El
+            // resultado real por dedo lo resuelve getSegments() en el wiring vía
+            // getSegmentedImage(), que sí lee del cache completo -- esta imagen es solo lo que
+            // se muestra en el <img> del live mientras tanto.
+            //
+            // Antes se usaba la primera imagen segmentada (images[0].base64, un solo dedo) como
+            // "representativa" -- pero internohuellas.js (onCapturedImage) reemplaza el <img>
+            // del live con ESTA MISMA imagen, así que el usuario veía el live "desaparecer" y
+            // quedar en un solo dedo suelto justo al completar la lectura. Pedido explícito del
+            // usuario (2026-09-24): se manda el ÚLTIMO frame de vista previa en su lugar
+            // (ctx.getLastPreviewFrame()), así el reemplazo no cambia lo que ya se estaba
+            // viendo -- con fallback a images[0].base64 si nunca llegó ningún frame de vista
+            // previa (ej. si el usuario deshabilitó la vista previa en algún punto).
+            const preview = ctx.getLastPreviewFrame() || (images.length > 0 ? images[0].base64 : null);
             ctx.pushEvent(channel, "aw_fingerprint_capture_captured_image_updated", [preview]);
             ctx.pushEvent(channel, "aw_fingerprint_capture_autocapture_status_updated", [AUTOCAPTURE_STATUS_COMPLETED]);
             reply(null, 0, "");
