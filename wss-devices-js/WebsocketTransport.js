@@ -165,6 +165,13 @@
   // de "por qué" falló (los que sí existen son sobre calidad/posición de dedo, que este puente
   // no distingue) -- usar el genérico en vez de fabricar una razón que no se puede confirmar.
 
+  // PNG de 1x1 transparente -- pedido explícito del usuario (2026-09-25): al completar una
+  // captura, el <img> del live debe quedar vacío en vez de mostrar cualquier dedo suelto (ver
+  // nota junto a aw_fingerprint_capture_start_auto_capture). Constante fija, no depende de nada
+  // del SDK ni de la vista previa.
+  const BLANK_PREVIEW_IMAGE_BASE64 =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+
   // Reintento automático de captura (ver nota en aw_fingerprint_capture_start_auto_capture) --
   // 30 intentos x 2s = 60s de margen antes de reportar el fallo al wiring, tiempo de sobra para
   // que el operador limpie el sensor o corrija la técnica de rodado/colocación entre intentos.
@@ -248,13 +255,6 @@
     // backpressure real).
     let fingerprintPreviewStarted = false;
     let pendingPreviewRequest = null; // { channel } o null
-    // Último frame de vista previa entregado (ver handleBridgeMessage) -- pedido explícito del
-    // usuario, 2026-09-24: internohuellas.js (onCapturedImage) reemplaza el <img> del live con
-    // la imagen que le llega en aw_fingerprint_capture_captured_image_updated (una huella YA
-    // segmentada, elegida como "representativa"), no con el último frame en vivo -- por eso el
-    // live "desaparecía" al completar la lectura. Se guarda aquí para reenviarlo como esa misma
-    // imagen "capturada" (ver attemptCapture más abajo), así el reemplazo no cambia lo que se ve.
-    let lastPreviewFrameBase64 = null;
 
     function ensureFingerprintPreviewStarted() {
       if (fingerprintPreviewStarted) return;
@@ -318,7 +318,6 @@
         // wiring de Aware sigue llamando requestNextPreviewImage() en su propio callback, pero
         // aquí ya no hace falta esperarlo para seguir entregando: siempre se muestra el frame
         // más reciente disponible.
-        lastPreviewFrameBase64 = msg.base64;
         if (pendingPreviewRequest) {
           const { channel } = pendingPreviewRequest;
           pushEvent(channel, "aw_fingerprint_capture_preview_image_updated", [msg.base64]);
@@ -401,7 +400,6 @@
       invalidateCaptureGeneration,
       requestNextPreviewFrame,
       stopFingerprintPreview,
-      getLastPreviewFrame: () => lastPreviewFrameBase64,
     };
 
     function dispatch(fn, args, channel, reply) {
@@ -546,16 +544,17 @@
             // getSegmentedImage(), que sí lee del cache completo -- esta imagen es solo lo que
             // se muestra en el <img> del live mientras tanto.
             //
-            // Antes se usaba la primera imagen segmentada (images[0].base64, un solo dedo) como
-            // "representativa" -- pero internohuellas.js (onCapturedImage) reemplaza el <img>
-            // del live con ESTA MISMA imagen, así que el usuario veía el live "desaparecer" y
-            // quedar en un solo dedo suelto justo al completar la lectura. Pedido explícito del
-            // usuario (2026-09-24): se manda el ÚLTIMO frame de vista previa en su lugar
-            // (ctx.getLastPreviewFrame()), así el reemplazo no cambia lo que ya se estaba
-            // viendo -- con fallback a images[0].base64 si nunca llegó ningún frame de vista
-            // previa (ej. si el usuario deshabilitó la vista previa en algún punto).
-            const preview = ctx.getLastPreviewFrame() || (images.length > 0 ? images[0].base64 : null);
-            ctx.pushEvent(channel, "aw_fingerprint_capture_captured_image_updated", [preview]);
+            // Historial: primero se usaba la primera imagen segmentada (images[0].base64, un
+            // solo dedo) como "representativa" -- pero internohuellas.js (onCapturedImage)
+            // reemplaza el <img> del live con ESTA MISMA imagen, así que el usuario veía el
+            // live "desaparecer" y quedar en un solo dedo suelto al completar. Se probó mandar
+            // el último frame de vista previa (ctx.getLastPreviewFrame()) y luego el buffer
+            // completo del lado del puente (ver WSS-DEVICES, ForwardFinalCaptureFrame) -- pero
+            // seguía mostrando un solo dedo en la prueba real. Pedido explícito del usuario
+            // (2026-09-25), para dejar de perseguir "cuál frame es el correcto": se manda un
+            // PNG en blanco fijo -- el <img> del live queda vacío al completar, en vez de
+            // mostrar cualquier dedo suelto.
+            ctx.pushEvent(channel, "aw_fingerprint_capture_captured_image_updated", [BLANK_PREVIEW_IMAGE_BASE64]);
             ctx.pushEvent(channel, "aw_fingerprint_capture_autocapture_status_updated", [AUTOCAPTURE_STATUS_COMPLETED]);
             reply(null, 0, "");
           })
