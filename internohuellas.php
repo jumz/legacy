@@ -53,39 +53,41 @@ include(FOLDER_HTML . 'include/header.php');
                  Propio de esta página, no toca internohuellas.js -- observa el texto de
                  "Capturando: ..." (id="prompt", que sí llena internohuellas.js) con un
                  MutationObserver en vez de depender del wiring script. -->
-            <svg id="huellasDiagrama" viewBox="0 0 400 150" style="width:100%; max-width:360px; margin-top:16px;">
+            <!-- Rediseñado como 3 filas apiladas (en vez de 3 columnas comprimidas en el
+                 ancho angosto de esta columna) -- pedido explícito del usuario, 2026-09-25:
+                 la versión anterior en 3 columnas era demasiado pequeña para distinguirse. -->
+            <svg id="huellasDiagrama" viewBox="0 0 320 310" style="width:100%; max-width:320px; margin-top:16px;">
               <g id="ledGroupLeft" class="led-group">
-                <text x="70" y="14" text-anchor="middle" font-size="11" fill="#666">Mano izquierda</text>
-                <circle class="led-dot" cx="10" cy="40" r="9"></circle>
-                <circle class="led-dot" cx="45" cy="40" r="9"></circle>
-                <circle class="led-dot" cx="80" cy="40" r="9"></circle>
-                <circle class="led-dot" cx="115" cy="40" r="9"></circle>
-                <text x="10" y="66" text-anchor="middle" font-size="9" fill="#666">Meñique</text>
-                <text x="45" y="66" text-anchor="middle" font-size="9" fill="#666">Anular</text>
-                <text x="80" y="66" text-anchor="middle" font-size="9" fill="#666">Medio</text>
-                <text x="115" y="66" text-anchor="middle" font-size="9" fill="#666">Índice</text>
+                <text x="10" y="24" font-size="18" fill="#666">Mano izquierda</text>
+                <circle class="led-dot" cx="30" cy="65" r="20"></circle>
+                <circle class="led-dot" cx="95" cy="65" r="20"></circle>
+                <circle class="led-dot" cx="160" cy="65" r="20"></circle>
+                <circle class="led-dot" cx="225" cy="65" r="20"></circle>
+                <text x="30" y="98" text-anchor="middle" font-size="13" fill="#666">Meñique</text>
+                <text x="95" y="98" text-anchor="middle" font-size="13" fill="#666">Anular</text>
+                <text x="160" y="98" text-anchor="middle" font-size="13" fill="#666">Medio</text>
+                <text x="225" y="98" text-anchor="middle" font-size="13" fill="#666">Índice</text>
               </g>
               <g id="ledGroupThumbs" class="led-group">
-                <text x="200" y="14" text-anchor="middle" font-size="11" fill="#666">Pulgares</text>
-                <circle class="led-dot" cx="182" cy="40" r="9"></circle>
-                <circle class="led-dot" cx="218" cy="40" r="9"></circle>
-                <text x="200" y="66" text-anchor="middle" font-size="9" fill="#666">Izq. / Der.</text>
+                <text x="10" y="128" font-size="18" fill="#666">Pulgares</text>
+                <circle class="led-dot" cx="95" cy="165" r="20"></circle>
+                <circle class="led-dot" cx="160" cy="165" r="20"></circle>
+                <text x="127" y="198" text-anchor="middle" font-size="13" fill="#666">Izquierdo / Derecho</text>
               </g>
               <g id="ledGroupRight" class="led-group">
-                <text x="330" y="14" text-anchor="middle" font-size="11" fill="#666">Mano derecha</text>
-                <circle class="led-dot" cx="285" cy="40" r="9"></circle>
-                <circle class="led-dot" cx="320" cy="40" r="9"></circle>
-                <circle class="led-dot" cx="355" cy="40" r="9"></circle>
-                <circle class="led-dot" cx="390" cy="40" r="9"></circle>
-                <text x="285" y="66" text-anchor="middle" font-size="9" fill="#666">Índice</text>
-                <text x="320" y="66" text-anchor="middle" font-size="9" fill="#666">Medio</text>
-                <text x="355" y="66" text-anchor="middle" font-size="9" fill="#666">Anular</text>
-                <text x="390" y="66" text-anchor="middle" font-size="9" fill="#666">Meñique</text>
+                <text x="10" y="228" font-size="18" fill="#666">Mano derecha</text>
+                <circle class="led-dot" cx="30" cy="265" r="20"></circle>
+                <circle class="led-dot" cx="95" cy="265" r="20"></circle>
+                <circle class="led-dot" cx="160" cy="265" r="20"></circle>
+                <circle class="led-dot" cx="225" cy="265" r="20"></circle>
+                <text x="30" y="298" text-anchor="middle" font-size="13" fill="#666">Índice</text>
+                <text x="95" y="298" text-anchor="middle" font-size="13" fill="#666">Medio</text>
+                <text x="160" y="298" text-anchor="middle" font-size="13" fill="#666">Anular</text>
+                <text x="225" y="298" text-anchor="middle" font-size="13" fill="#666">Meñique</text>
               </g>
-              <text x="200" y="95" text-anchor="middle" font-size="10" fill="#999" id="huellasDiagramaLeyenda">Coloque los dedos indicados en verde</text>
             </svg>
             <style>
-              #huellasDiagrama .led-dot { fill: #e0e0e0; stroke: #b0b0b0; stroke-width: 1; transition: fill 0.2s; }
+              #huellasDiagrama .led-dot { fill: #e0e0e0; stroke: #b0b0b0; stroke-width: 2; transition: fill 0.2s; }
               #huellasDiagrama .led-group.activo .led-dot { fill: #28a745; stroke: #1e7e34; }
               #huellasDiagrama .led-group.activo text { fill: #1e7e34; font-weight: bold; }
             </style>
