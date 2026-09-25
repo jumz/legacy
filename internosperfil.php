@@ -920,7 +920,7 @@ $_SESSION['tokenaudio'] = md5(uniqid(rand(), true));
 						.iris-container {
 							display: grid;
 							grid-template-columns: repeat(2, 1fr);
-							gap: 12px;
+							gap: 36px;
 							align-items: start;
 						}
 						.iris-container > div {
