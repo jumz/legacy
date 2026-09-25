@@ -57,58 +57,45 @@ include(FOLDER_HTML . 'include/header.php');
                  FingerprintCaptureApi.Impression en tiempo de ejecución (no contra texto
                  adivinado), igual que en las otras dos páginas -- las etiquetas mostradas para
                  los códigos ROLLED_* también son español ("Índice derecho rolado", etc, ver
-                 aw_fingerprint_capture.js:260-289). Sin confirmar todavía en hardware real. -->
-            <svg id="huellasDiagrama" viewBox="0 0 320 310" style="width:100%; max-width:320px; margin-top:16px;">
-              <text x="10" y="24" font-size="18" fill="#666">Mano izquierda</text>
-              <g class="finger-dot" id="dotLeftLittle">
-                <circle class="led-dot" cx="30" cy="65" r="20"></circle>
-                <text x="30" y="98" text-anchor="middle" font-size="13" fill="#666">Meñique</text>
-              </g>
-              <g class="finger-dot" id="dotLeftRing">
-                <circle class="led-dot" cx="95" cy="65" r="20"></circle>
-                <text x="95" y="98" text-anchor="middle" font-size="13" fill="#666">Anular</text>
-              </g>
-              <g class="finger-dot" id="dotLeftMiddle">
-                <circle class="led-dot" cx="160" cy="65" r="20"></circle>
-                <text x="160" y="98" text-anchor="middle" font-size="13" fill="#666">Medio</text>
-              </g>
-              <g class="finger-dot" id="dotLeftIndex">
-                <circle class="led-dot" cx="225" cy="65" r="20"></circle>
-                <text x="225" y="98" text-anchor="middle" font-size="13" fill="#666">Índice</text>
-              </g>
+                 aw_fingerprint_capture.js:260-289). Rediseñado (2026-09-25, misma tarde) como dos
+                 manos ilustradas de frente con un círculo superpuesto en la punta de cada dedo,
+                 mismo rediseño pedido por el usuario para internohuellas.php. Sin confirmar
+                 todavía en hardware real. -->
+            <svg id="huellasDiagrama" viewBox="0 0 400 260" style="width:100%; max-width:400px; margin-top:16px;">
+              <!-- Mano izquierda -->
+              <rect class="hand-shape" x="45" y="215" width="60" height="35" rx="10"></rect>
+              <rect class="hand-shape" x="15" y="135" width="130" height="85" rx="26"></rect>
+              <rect class="hand-shape" x="140" y="160" width="45" height="24" rx="12"></rect>
+              <rect class="hand-shape" x="17" y="75" width="26" height="65" rx="13"></rect>
+              <rect class="hand-shape" x="52" y="45" width="26" height="95" rx="13"></rect>
+              <rect class="hand-shape" x="87" y="30" width="26" height="110" rx="13"></rect>
+              <rect class="hand-shape" x="122" y="50" width="26" height="90" rx="13"></rect>
 
-              <text x="10" y="128" font-size="18" fill="#666">Pulgares</text>
-              <g class="finger-dot" id="dotThumbLeft">
-                <circle class="led-dot" cx="95" cy="165" r="20"></circle>
-                <text x="95" y="198" text-anchor="middle" font-size="13" fill="#666">Izquierdo</text>
-              </g>
-              <g class="finger-dot" id="dotThumbRight">
-                <circle class="led-dot" cx="160" cy="165" r="20"></circle>
-                <text x="160" y="198" text-anchor="middle" font-size="13" fill="#666">Derecho</text>
-              </g>
+              <!-- Mano derecha (misma forma, en espejo) -->
+              <rect class="hand-shape" x="295" y="215" width="60" height="35" rx="10"></rect>
+              <rect class="hand-shape" x="255" y="135" width="130" height="85" rx="26"></rect>
+              <rect class="hand-shape" x="215" y="160" width="45" height="24" rx="12"></rect>
+              <rect class="hand-shape" x="252" y="50" width="26" height="90" rx="13"></rect>
+              <rect class="hand-shape" x="287" y="30" width="26" height="110" rx="13"></rect>
+              <rect class="hand-shape" x="322" y="45" width="26" height="95" rx="13"></rect>
+              <rect class="hand-shape" x="357" y="75" width="26" height="65" rx="13"></rect>
 
-              <text x="10" y="228" font-size="18" fill="#666">Mano derecha</text>
-              <g class="finger-dot" id="dotRightIndex">
-                <circle class="led-dot" cx="30" cy="265" r="20"></circle>
-                <text x="30" y="298" text-anchor="middle" font-size="13" fill="#666">Índice</text>
-              </g>
-              <g class="finger-dot" id="dotRightMiddle">
-                <circle class="led-dot" cx="95" cy="265" r="20"></circle>
-                <text x="95" y="298" text-anchor="middle" font-size="13" fill="#666">Medio</text>
-              </g>
-              <g class="finger-dot" id="dotRightRing">
-                <circle class="led-dot" cx="160" cy="265" r="20"></circle>
-                <text x="160" y="298" text-anchor="middle" font-size="13" fill="#666">Anular</text>
-              </g>
-              <g class="finger-dot" id="dotRightLittle">
-                <circle class="led-dot" cx="225" cy="265" r="20"></circle>
-                <text x="225" y="298" text-anchor="middle" font-size="13" fill="#666">Meñique</text>
-              </g>
+              <!-- Círculos superpuestos en la punta de cada dedo -->
+              <circle class="led-dot" id="dotLeftLittle" cx="30" cy="88" r="14"></circle>
+              <circle class="led-dot" id="dotLeftRing" cx="65" cy="58" r="14"></circle>
+              <circle class="led-dot" id="dotLeftMiddle" cx="100" cy="43" r="14"></circle>
+              <circle class="led-dot" id="dotLeftIndex" cx="135" cy="63" r="14"></circle>
+              <circle class="led-dot" id="dotThumbLeft" cx="173" cy="172" r="14"></circle>
+              <circle class="led-dot" id="dotThumbRight" cx="227" cy="172" r="14"></circle>
+              <circle class="led-dot" id="dotRightIndex" cx="265" cy="63" r="14"></circle>
+              <circle class="led-dot" id="dotRightMiddle" cx="300" cy="43" r="14"></circle>
+              <circle class="led-dot" id="dotRightRing" cx="335" cy="58" r="14"></circle>
+              <circle class="led-dot" id="dotRightLittle" cx="370" cy="88" r="14"></circle>
             </svg>
             <style>
-              #huellasDiagrama .led-dot { fill: #e0e0e0; stroke: #b0b0b0; stroke-width: 2; transition: fill 0.2s; }
-              #huellasDiagrama .finger-dot.activo .led-dot { fill: #28a745; stroke: #1e7e34; }
-              #huellasDiagrama .finger-dot.activo text { fill: #1e7e34; font-weight: bold; }
+              #huellasDiagrama .hand-shape { fill: #f6d3b8; stroke: #d3a077; stroke-width: 2; }
+              #huellasDiagrama .led-dot { fill: rgba(255,255,255,0.45); stroke: #8a8a8a; stroke-width: 2; transition: fill 0.2s, stroke 0.2s; }
+              #huellasDiagrama .led-dot.activo { fill: #28a745; stroke: #1e7e34; }
             </style>
             <script>
               (function () {

@@ -52,44 +52,51 @@ include(FOLDER_HTML . 'include/header.php');
                  que se está pidiendo en cada momento, igual que los LEDs físicos del lector.
                  Propio de esta página, no toca internohuellas.js -- observa el texto de
                  "Capturando: ..." (id="prompt", que sí llena internohuellas.js) con un
-                 MutationObserver en vez de depender del wiring script. -->
-            <!-- Rediseñado como 3 filas apiladas (en vez de 3 columnas comprimidas en el
-                 ancho angosto de esta columna) -- pedido explícito del usuario, 2026-09-25:
-                 la versión anterior en 3 columnas era demasiado pequeña para distinguirse. -->
-            <svg id="huellasDiagrama" viewBox="0 0 320 310" style="width:100%; max-width:320px; margin-top:16px;">
-              <g id="ledGroupLeft" class="led-group">
-                <text x="10" y="24" font-size="18" fill="#666">Mano izquierda</text>
-                <circle class="led-dot" cx="30" cy="65" r="20"></circle>
-                <circle class="led-dot" cx="95" cy="65" r="20"></circle>
-                <circle class="led-dot" cx="160" cy="65" r="20"></circle>
-                <circle class="led-dot" cx="225" cy="65" r="20"></circle>
-                <text x="30" y="98" text-anchor="middle" font-size="13" fill="#666">Meñique</text>
-                <text x="95" y="98" text-anchor="middle" font-size="13" fill="#666">Anular</text>
-                <text x="160" y="98" text-anchor="middle" font-size="13" fill="#666">Medio</text>
-                <text x="225" y="98" text-anchor="middle" font-size="13" fill="#666">Índice</text>
-              </g>
-              <g id="ledGroupThumbs" class="led-group">
-                <text x="10" y="128" font-size="18" fill="#666">Pulgares</text>
-                <circle class="led-dot" cx="95" cy="165" r="20"></circle>
-                <circle class="led-dot" cx="160" cy="165" r="20"></circle>
-                <text x="127" y="198" text-anchor="middle" font-size="13" fill="#666">Izquierdo / Derecho</text>
-              </g>
-              <g id="ledGroupRight" class="led-group">
-                <text x="10" y="228" font-size="18" fill="#666">Mano derecha</text>
-                <circle class="led-dot" cx="30" cy="265" r="20"></circle>
-                <circle class="led-dot" cx="95" cy="265" r="20"></circle>
-                <circle class="led-dot" cx="160" cy="265" r="20"></circle>
-                <circle class="led-dot" cx="225" cy="265" r="20"></circle>
-                <text x="30" y="298" text-anchor="middle" font-size="13" fill="#666">Índice</text>
-                <text x="95" y="298" text-anchor="middle" font-size="13" fill="#666">Medio</text>
-                <text x="160" y="298" text-anchor="middle" font-size="13" fill="#666">Anular</text>
-                <text x="225" y="298" text-anchor="middle" font-size="13" fill="#666">Meñique</text>
-              </g>
+                 MutationObserver en vez de depender del wiring script. La comparación es contra
+                 el objeto FingerprintCaptureApi.Impression en tiempo de ejecución (no contra
+                 texto adivinado) -- confirmado que las etiquetas mostradas son español ("Mano
+                 izquierda", etc, ver aw_fingerprint_capture.js:291-335), no el nombre del enum.
+                 Rediseñado (2026-09-25, misma tarde) como dos manos ilustradas de frente (forma
+                 simplificada -- rectángulos redondeados, no una foto) con un círculo superpuesto
+                 en la punta de cada dedo, en vez de círculos sueltos con el nombre del dedo al
+                 lado -- pedido explícito del usuario para que se vea más parecido al diagrama de
+                 referencia del fabricante ("RealScan-10, COLOCACIÓN DE LOS DIEZ DEDOS"). Sin
+                 confirmar todavía en hardware real. -->
+            <svg id="huellasDiagrama" viewBox="0 0 400 260" style="width:100%; max-width:400px; margin-top:16px;">
+              <!-- Mano izquierda -->
+              <rect class="hand-shape" x="45" y="215" width="60" height="35" rx="10"></rect>
+              <rect class="hand-shape" x="15" y="135" width="130" height="85" rx="26"></rect>
+              <rect class="hand-shape" x="140" y="160" width="45" height="24" rx="12"></rect>
+              <rect class="hand-shape" x="17" y="75" width="26" height="65" rx="13"></rect>
+              <rect class="hand-shape" x="52" y="45" width="26" height="95" rx="13"></rect>
+              <rect class="hand-shape" x="87" y="30" width="26" height="110" rx="13"></rect>
+              <rect class="hand-shape" x="122" y="50" width="26" height="90" rx="13"></rect>
+
+              <!-- Mano derecha (misma forma, en espejo) -->
+              <rect class="hand-shape" x="295" y="215" width="60" height="35" rx="10"></rect>
+              <rect class="hand-shape" x="255" y="135" width="130" height="85" rx="26"></rect>
+              <rect class="hand-shape" x="215" y="160" width="45" height="24" rx="12"></rect>
+              <rect class="hand-shape" x="252" y="50" width="26" height="90" rx="13"></rect>
+              <rect class="hand-shape" x="287" y="30" width="26" height="110" rx="13"></rect>
+              <rect class="hand-shape" x="322" y="45" width="26" height="95" rx="13"></rect>
+              <rect class="hand-shape" x="357" y="75" width="26" height="65" rx="13"></rect>
+
+              <!-- Círculos superpuestos en la punta de cada dedo -->
+              <circle class="led-dot" id="dotLeftLittle" cx="30" cy="88" r="14"></circle>
+              <circle class="led-dot" id="dotLeftRing" cx="65" cy="58" r="14"></circle>
+              <circle class="led-dot" id="dotLeftMiddle" cx="100" cy="43" r="14"></circle>
+              <circle class="led-dot" id="dotLeftIndex" cx="135" cy="63" r="14"></circle>
+              <circle class="led-dot" id="dotThumbLeft" cx="173" cy="172" r="14"></circle>
+              <circle class="led-dot" id="dotThumbRight" cx="227" cy="172" r="14"></circle>
+              <circle class="led-dot" id="dotRightIndex" cx="265" cy="63" r="14"></circle>
+              <circle class="led-dot" id="dotRightMiddle" cx="300" cy="43" r="14"></circle>
+              <circle class="led-dot" id="dotRightRing" cx="335" cy="58" r="14"></circle>
+              <circle class="led-dot" id="dotRightLittle" cx="370" cy="88" r="14"></circle>
             </svg>
             <style>
-              #huellasDiagrama .led-dot { fill: #e0e0e0; stroke: #b0b0b0; stroke-width: 2; transition: fill 0.2s; }
-              #huellasDiagrama .led-group.activo .led-dot { fill: #28a745; stroke: #1e7e34; }
-              #huellasDiagrama .led-group.activo text { fill: #1e7e34; font-weight: bold; }
+              #huellasDiagrama .hand-shape { fill: #f6d3b8; stroke: #d3a077; stroke-width: 2; }
+              #huellasDiagrama .led-dot { fill: rgba(255,255,255,0.45); stroke: #8a8a8a; stroke-width: 2; transition: fill 0.2s, stroke 0.2s; }
+              #huellasDiagrama .led-dot.activo { fill: #28a745; stroke: #1e7e34; }
             </style>
             <script>
               // MutationObserver sobre #prompt en vez de tocar internohuellas.js -- ese
@@ -100,28 +107,27 @@ include(FOLDER_HTML . 'include/header.php');
               // ("Mano izquierda"/"Mano derecha"/"Ambos pulgares", ver
               // aw_fingerprint_capture.js:291-335). Por eso se compara contra el propio objeto
               // FingerprintCaptureApi.Impression en vez de contra texto adivinado -- así sigue
-              // funcionando aunque cambien las etiquetas. Bug confirmado: la versión anterior
-              // (que comparaba contra "LEFT_FOUR"/"RIGHT_FOUR"/"THUMBS") nunca coincidía con nada
-              // y ningún dedo se pintaba de verde.
+              // funcionando aunque cambien las etiquetas.
               (function () {
                 var promptEl = document.getElementById('prompt');
                 var groups = {
-                  left: document.getElementById('ledGroupLeft'),
-                  thumbs: document.getElementById('ledGroupThumbs'),
-                  right: document.getElementById('ledGroupRight')
+                  left: ['dotLeftLittle', 'dotLeftRing', 'dotLeftMiddle', 'dotLeftIndex'],
+                  right: ['dotRightIndex', 'dotRightMiddle', 'dotRightRing', 'dotRightLittle'],
+                  thumbs: ['dotThumbLeft', 'dotThumbRight']
                 };
+                var allDotIds = [].concat(groups.left, groups.right, groups.thumbs);
                 function actualizarDiagrama() {
                   var texto = promptEl ? promptEl.textContent : '';
-                  var activo = null;
+                  var activos = [];
                   if (typeof FingerprintCaptureApi !== 'undefined') {
                     var Impression = FingerprintCaptureApi.Impression;
-                    if (texto === Impression[Impression.PLAIN_LEFT_FOUR_FINGERS]) activo = 'left';
-                    else if (texto === Impression[Impression.PLAIN_RIGHT_FOUR_FINGERS]) activo = 'right';
-                    else if (texto === Impression[Impression.PLAIN_DUAL_THUMBS]) activo = 'thumbs';
+                    if (texto === Impression[Impression.PLAIN_LEFT_FOUR_FINGERS]) activos = groups.left;
+                    else if (texto === Impression[Impression.PLAIN_RIGHT_FOUR_FINGERS]) activos = groups.right;
+                    else if (texto === Impression[Impression.PLAIN_DUAL_THUMBS]) activos = groups.thumbs;
                   }
-                  Object.keys(groups).forEach(function (key) {
-                    if (!groups[key]) return;
-                    groups[key].classList.toggle('activo', key === activo);
+                  allDotIds.forEach(function (id) {
+                    var el = document.getElementById(id);
+                    if (el) el.classList.toggle('activo', activos.indexOf(id) !== -1);
                   });
                 }
                 if (promptEl) {
