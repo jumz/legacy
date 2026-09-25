@@ -175,7 +175,17 @@
   // individual) obligaba a reiniciar las 10 huellas completas porque los slaps nunca tuvieron
   // este reintento. Se generaliza a mano izquierda/derecha/pulgares también.
   const CAPTURE_RETRY_DELAY_MS = 2000;
-  const CAPTURE_MAX_ATTEMPTS = 30;
+  const CAPTURE_MAX_ATTEMPTS = 30; // dedo individual -- ya afinado en hardware (2026-09-15), no bajar.
+
+  // Límite MÁS BAJO específico para slaps de mano (2026-09-24): confirmado en hardware que un
+  // sensor persistentemente sucio (no transitorio) combinado con 30 intentos posibles -- cada
+  // uno pudiendo tardar hasta ~20s si toca el timeout del puente (-203), no solo los ~2s de un
+  // -115/-116 instantáneo -- coincidió con que el puente completo dejara de responder por
+  // varios minutos hasta reiniciarse solo. Con 5 intentos, el peor caso (todos por timeout de
+  // ~20s) queda acotado a ~110s en vez de hasta ~11 minutos. Dedo individual NO se toca --
+  // ese límite alto sí está confirmado necesario (ver nota arriba). Sin confirmar todavía si 5
+  // es suficiente para los casos -115/-116 rápidos que sí se esperan resolver solos.
+  const SLAP_MAX_ATTEMPTS = 5;
 
   // Muestra el progreso del reintento en la pantalla del operador. Se escribe directo sobre
   // el <span id="status"> que ya usan internohuellas.php/internohuellasindividual.php/
@@ -184,11 +194,11 @@
   // (este adaptador), a diferencia de los wiring scripts. Sin esto, el operador solo veía
   // "Capturando..." fijo durante hasta 60s de reintentos silenciosos, sin saber que debía
   // retirar y volver a colocar el dedo/mano.
-  function showRetryStatus(attemptNumber) {
+  function showRetryStatus(attemptNumber, maxAttempts) {
     const statusElement = document.getElementById("status");
     if (!statusElement) return;
     statusElement.innerText =
-      `Reintentando (intento ${attemptNumber} de ${CAPTURE_MAX_ATTEMPTS})... retira el dedo/mano por completo y vuelve a colocarlo.`;
+      `Reintentando (intento ${attemptNumber} de ${maxAttempts})... retira el dedo/mano por completo y vuelve a colocarlo.`;
   }
 
   // Funciones propietarias de Aware sin equivalente real en RealScan/RS_SDK -- responden error
@@ -458,6 +468,10 @@
         return;
       }
       const hand = info.kind === "slap" ? info.hand : info.kind === "single_rolled" ? "single_rolled" : "single";
+      // Ver nota de SLAP_MAX_ATTEMPTS arriba -- límite más bajo para slaps (mano/pulgares) que
+      // para dedo individual, para acotar el peor caso si el sensor está persistentemente sucio
+      // (no transitorio) en vez de martillarlo con hasta 30 intentos de hasta ~20s cada uno.
+      const maxAttempts = info.kind === "slap" ? SLAP_MAX_ATTEMPTS : CAPTURE_MAX_ATTEMPTS;
 
       // Reintento automático SOLO dentro del adaptador -- no en los wiring scripts
       // (internohuellas.js/internohuellasroladas.js/internohuellasindividual.js): esos
@@ -478,8 +492,9 @@
       // slaps de mano/pulgares -- el usuario tuvo que reiniciar las 10 huellas completas por
       // un -115 aislado en pulgares). Reintentando aquí, el wiring nunca se entera de los
       // intentos fallidos individuales -- solo ve el resultado final, exitoso o (tras agotar
-      // los reintentos) fallido. Aplica por igual a dedo individual y a slap de mano -- ya no
-      // se distingue por tipo de impresión.
+      // los reintentos) fallido. El MECANISMO de reintento aplica por igual a dedo individual y
+      // a slap de mano -- solo el LÍMITE de intentos distingue entre ambos (ver
+      // SLAP_MAX_ATTEMPTS arriba).
       // Ver la nota de captureGeneration arriba -- una captura nueva siempre invalida cualquier
       // cadena de reintento anterior que hubiera quedado viva (por ejemplo, si el wiring canceló
       // el dedo anterior y pasó a este sin que el setTimeout pendiente de ese dedo se enterara).
@@ -529,21 +544,21 @@
             reply(null, 0, "");
           })
           .catch((err) => {
-            console.log(`[WebsocketTransport][diag] catch de attemptCapture(${attemptNumber}): err=`, err && err.message, `generation=${generation} currentGeneration=${ctx.isCurrentCaptureGeneration(generation)} maxAttempts=${CAPTURE_MAX_ATTEMPTS}`); // diagnóstico temporal 2026-09-24
+            console.log(`[WebsocketTransport][diag] catch de attemptCapture(${attemptNumber}): err=`, err && err.message, `generation=${generation} currentGeneration=${ctx.isCurrentCaptureGeneration(generation)} maxAttempts=${maxAttempts}`); // diagnóstico temporal 2026-09-24
             if (!ctx.isCurrentCaptureGeneration(generation)) {
               console.log(`[WebsocketTransport][diag] catch de attemptCapture(${attemptNumber}) descartado: generación superada, NO reintenta`); // diagnóstico temporal 2026-09-24
               return; // esta cadena ya fue superada
             }
-            if (attemptNumber < CAPTURE_MAX_ATTEMPTS) {
+            if (attemptNumber < maxAttempts) {
               console.warn(
                 `[WebsocketTransport] Intento ${attemptNumber} de captura (${hand}) falló, reintentando en ${CAPTURE_RETRY_DELAY_MS}ms:`,
                 err && err.message
               );
-              showRetryStatus(attemptNumber);
+              showRetryStatus(attemptNumber, maxAttempts);
               setTimeout(() => attemptCapture(attemptNumber + 1), CAPTURE_RETRY_DELAY_MS);
               return;
             }
-            console.log(`[WebsocketTransport][diag] attemptCapture: se agotaron los ${CAPTURE_MAX_ATTEMPTS} intentos, se reporta ABORTED`); // diagnóstico temporal 2026-09-24
+            console.log(`[WebsocketTransport][diag] attemptCapture: se agotaron los ${maxAttempts} intentos, se reporta ABORTED`); // diagnóstico temporal 2026-09-24
             ctx.pushEvent(channel, "aw_fingerprint_capture_autocapture_status_updated", [AUTOCAPTURE_STATUS_ABORTED]);
             reply(null, -1, err && err.message ? err.message : "Error de captura");
           });
