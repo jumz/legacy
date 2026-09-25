@@ -330,13 +330,17 @@
     }
     websocketHandle.onmessage = handleBridgeMessage;
 
-    // Envía fingerprint.capture al puente real y espera capture.result/error para ese requestId.
-    function captureReal(hand) {
+    // Envía fingerprint.capture al puente real y espera capture.result/error para ese
+    // requestId. `finger` es opcional (solo aplica a dedo individual plano/rodado -- ver
+    // IMPRESSION_INFO, ya trae el nombre ISO exacto tipo "left_index") -- pedido explícito del
+    // usuario, 2026-09-25, para que el puente pueda encender el LED del dedo específico, igual
+    // que ya hace con las manos completas en internohuellas.php.
+    function captureReal(hand, finger) {
       return new Promise((resolve, reject) => {
         const requestId = uuid();
         currentCaptureRequestId = requestId;
         pendingByRequestId.set(requestId, { resolve, reject });
-        sendToBridge({ type: "fingerprint.capture", requestId, hand });
+        sendToBridge({ type: "fingerprint.capture", requestId, hand, finger });
       });
     }
 
@@ -530,7 +534,7 @@
         if (!ctx.isCurrentCaptureGeneration(generation)) return; // superado por una cancelación u otra captura
         ctx.pushEvent(channel, "aw_fingerprint_capture_autocapture_status_updated", [AUTOCAPTURE_STATUS_CAPTURING]);
         ctx
-          .captureReal(hand)
+          .captureReal(hand, info.finger)
           .then((images) => {
             if (!ctx.isCurrentCaptureGeneration(generation)) return; // esta cadena ya fue superada
             const cache = ctx.captureCache.get(channel) || new Map();
