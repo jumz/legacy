@@ -346,30 +346,40 @@ $('.huellas').click(function () {
     }
 
     // WebsocketTransport.js traduce esto a `omittedFingers` para el puente real (ver
-    // aw_fingerprint_capture_set_finger_missing) -- antes eran no-ops puros.
+    // aw_fingerprint_capture_set_finger_missing) -- antes eran no-ops puros. IMPORTANTE: el
+    // reinicio de abajo (endAutoCapture/startPreview) va ENCADENADO dentro de este mismo
+    // .then(), no disparado en paralelo -- el usuario reportó que, con la versión anterior (que
+    // lo disparaba en paralelo), el LED físico no se actualizaba al desmarcar un dedo (aunque el
+    // diagrama SVG sí, porque ese lee el DOM directo sin ningún async de por medio). Hipótesis
+    // de causa (sin confirmar todavía en hardware que esto lo arregla): aw_fingerprint_capture_
+    // start_auto_capture (disparado por startPreview) lee ctx.missingFingerCodes en el momento
+    // en que se llama -- si eso pasaba ANTES de que la respuesta de este RPC (dos saltos:
+    // setComponent, luego captureComponent, cada uno resuelto vía queueMicrotask) alcanzara a
+    // actualizar ese estado, el puente armaba con el conjunto omitido VIEJO.
     setComponent.setFingerMissing(fingerCode, !isChecked).then(function () {
         return captureComponent.setFingerMissing(fingerCode, !isChecked);
+    }).then(function () {
+        // Si el dedo que se acaba de (des)marcar pertenece al grupo que se está armando/
+        // capturando AHORA MISMO, hay que reiniciar esa captura -- pedido explícito del
+        // usuario: "cada que se desmarca un dedo debe reiniciar la captura". No basta con
+        // reiniciar solo cuando el grupo queda completamente omitido: la captura YA ARMADA
+        // sigue usando el conteo mínimo y los LEDs que tenía al momento de armarse
+        // (RS_SetMinimumFinger/RS_SetFingerLED ya se mandaron al puente) -- sin reiniciar, el
+        // LED físico se queda desactualizado. Al volver a llamar startPreview(),
+        // aw_fingerprint_capture_start_auto_capture (WebsocketTransport.js) recalcula
+        // omittedFingers con el estado YA ACTUALIZADO (garantizado por el encadenado de
+        // arriba) y arma de nuevo con el LED/mínimo correctos -- si el grupo quedó
+        // completamente omitido, startPreview() ya lo salta solo (ver isImpressionFullyOmitted
+        // arriba). Si el dedo pertenece a un grupo QUE TODAVÍA NO le toca su turno, no hace
+        // falta reiniciar nada -- ya queda registrado en missingFingers y se aplica solo
+        // cuando le toque.
+        var currentPositions = getPositions(impressionsToCapture[impressionsIndex]);
+        if (currentPositions.indexOf(fingerCode) !== -1) {
+            return captureComponent.endAutoCapture().then(function () {
+                startPreview();
+            });
+        }
     });
-
-    // Si el dedo que se acaba de (des)marcar pertenece al grupo que se está armando/capturando
-    // AHORA MISMO, hay que reiniciar esa captura -- pedido explícito del usuario: "cada que se
-    // desmarca un dedo debe reiniciar la captura". No basta con reiniciar solo cuando el grupo
-    // queda completamente omitido: la captura YA ARMADA sigue usando el conteo mínimo y los
-    // LEDs que tenía al momento de armarse (RS_SetMinimumFinger/RS_SetFingerLED ya se mandaron
-    // al puente) -- sin reiniciar, el LED físico se queda desactualizado aunque el diagrama SVG
-    // (que sí observa #prompt/missingFingers en vivo) ya se pinte correctamente. Al volver a
-    // llamar startPreview(), aw_fingerprint_capture_start_auto_capture (WebsocketTransport.js)
-    // recalcula omittedFingers con el estado actual y arma de nuevo con el LED/mínimo correctos
-    // -- si el grupo quedó completamente omitido, startPreview() ya lo salta solo (ver
-    // isImpressionFullyOmitted arriba). Si el dedo pertenece a un grupo QUE TODAVÍA NO le toca
-    // su turno, no hace falta reiniciar nada -- ya queda registrado en missingFingers y se
-    // aplica solo cuando le toque (mismo comentario de antes).
-    var currentPositions = getPositions(impressionsToCapture[impressionsIndex]);
-    if (currentPositions.indexOf(fingerCode) !== -1) {
-        captureComponent.endAutoCapture().then(function () {
-            startPreview();
-        });
-    }
 });
 
 $('#btnGuardar').click(function(){
