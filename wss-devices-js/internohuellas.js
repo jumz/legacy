@@ -98,12 +98,17 @@ function onAutocaptureStatus(status) {
     autocaptureStatus.innerText = FingerprintCaptureApi.AutocaptureStatus[status];
 }
 
-// Adds an image to the end of the document
-function appendImage(imageData)
+// Adds an image to the end of the document. `fingerCode` (FingerprintCaptureApi.Finger, ej.
+// LEFT_LITTLE_FINGER) es opcional -- pedido explícito del usuario, 2026-09-25, para poder
+// encontrar la imagen de un dedo específico después (ver btnGuardar/btnGuardarContinuar), ya
+// que con dedos omitidos el orden de llegada/aparición en #resultados ya no corresponde 1:1
+// a la posición fija que espera el backend (internohuellas.inc.php).
+function appendImage(imageData, fingerCode)
 {
     document.body.appendChild(document.createElement("br"));
     var img = document.createElement("img");
     img.src = "data:image/jpg;base64," + imageData;
+    if (fingerCode !== undefined) img.dataset.fingerCode = fingerCode;
     document.getElementById('resultados').appendChild(img);
 }
 
@@ -144,16 +149,21 @@ function onCapturedImage(base64Image) {
 function getSegments (){
     var positions = getPositions();
     for (i = 0; i < positions.length; i++) {
-        var impression = positions[i];
-        if (missingFingers.indexOf(impression) === -1)
-        {
-            // Translate single finger code to finger in slap code
-            impression = ImpressionInfo.SingleFingerToFingerInSlap[impression];
-            setComponent.getSegmentedImage(impression,
-                FingerprintSetApi.ImageFormat.PNG).then( function(imageData){
-                appendImage(imageData);
-            });
-        }
+        // IIFE para capturar fingerCode por iteración -- el for de arriba usa "var i"/"var
+        // impression" (sin "let"), así que sin esto todas las promesas resueltas más tarde
+        // verían el ÚLTIMO valor de la iteración, no el que les tocaba (mismo problema clásico
+        // de var+async en un loop). Necesario para el data-finger-code de appendImage.
+        (function (fingerCode) {
+            if (missingFingers.indexOf(fingerCode) === -1)
+            {
+                // Translate single finger code to finger in slap code
+                var impression = ImpressionInfo.SingleFingerToFingerInSlap[fingerCode];
+                setComponent.getSegmentedImage(impression,
+                    FingerprintSetApi.ImageFormat.PNG).then( function(imageData){
+                    appendImage(imageData, fingerCode);
+                });
+            }
+        })(positions[i]);
     }
 }
 
@@ -382,56 +392,61 @@ $('.huellas').click(function () {
     });
 });
 
+// El backend (internohuellas.inc.php, fuera de este repo) espera SIEMPRE los 10 elementos en
+// posición FIJA (índice 0=meñique izq ... 9=pulgar der, confirmado viendo la respuesta xajax
+// de un interno ya guardado: dedo_0..dedo_9 en ese orden) -- antes esto se cumplía solo porque
+// los 10 checkboxes SIEMPRE estaban marcados y deshabilitados, así que "input:checked" siempre
+// devolvía los 10 en orden de DOM. Al permitir desmarcarlos (dedo omitido), "input:checked"
+// empezó a devolver MENOS de 10, y el backend tronaba con "Undefined offset" al leer una
+// posición (típicamente 8/9, los pulgares) que ya no existía -- confirmado viendo el error real
+// en la respuesta del servidor. Se recorren TODOS los checkboxes (marcados o no) en orden de
+// DOM -- el mismo orden que ya usaba el backend -- y se manda '' como imagen para los omitidos
+// en vez de acortar el arreglo. Pedido explícito del usuario, 2026-09-25.
+function buildFixedPositionArrays() {
+    var arreglo_capturas = [];
+    var arreglo = [];
+    var faltaAlguna = false;
+    $('#contenedor_captura_huellas input.huellas').each(function () {
+        var checkboxId = $(this).attr('id');
+        var isChecked = $(this).is(':checked');
+        arreglo_capturas.push(checkboxId);
+        var fingerCode = CHECKBOX_TO_FINGER[checkboxId];
+        var img = fingerCode !== undefined
+            ? $('#resultados img[data-finger-code="' + fingerCode + '"]')
+            : $();
+        if (isChecked && img.length === 0) faltaAlguna = true;
+        arreglo.push(img.length ? img.attr('src') : '');
+    });
+    return { arreglo_capturas: arreglo_capturas, arreglo: arreglo, faltaAlguna: faltaAlguna };
+}
+
 $('#btnGuardar').click(function(){
     var id_interno = $('#id_interno').val();
-    var imagenes = $('#resultados img');
-    // Antes bloqueaba si no había NINGUNA imagen, sin importar el motivo -- ahora, si el
-    // operador omitió deliberadamente los 10 dedos (0 checkboxes marcados), debe poder
-    // continuar de todas formas. Pedido explícito del usuario, 2026-09-25: "en el caso de que
-    // se omitan todos los dedos debe poder dar siguiente hasta el siguiente paso".
-    if($('#resultados img').length<=0 && $('#contenedor_captura_huellas input:checked').length>0){
-        mostrarError("No se encontraron huellas capturadas");
+    var datos = buildFixedPositionArrays();
+    // Antes bloqueaba si no había NINGUNA imagen, sin importar el motivo -- ahora solo bloquea
+    // si algún dedo que SIGUE marcado (requerido) no tiene imagen. Si el operador omitió
+    // deliberadamente los 10 dedos, debe poder continuar de todas formas. Pedido explícito del
+    // usuario, 2026-09-25: "en el caso de que se omitan todos los dedos debe poder dar
+    // siguiente hasta el siguiente paso".
+    if (datos.faltaAlguna) {
+        mostrarError("Falta capturar huellas");
         return false;
     }
-    var arreglo = [];
-    $.each( imagenes, function( key, value ) {
-      arreglo.push($(this).attr('src'));
-    });
-    var arreglo_capturas = [];
-    $('#contenedor_captura_huellas input:checked').each(function() {
-        arreglo_capturas.push($(this).attr('id'));
-    });
-    if(arreglo_capturas.length!=arreglo.length){
-        mostrarError("Falta capturar huellas");
-        return false;        
-    }
     mostrarEspera();
-    xajax_guardarHuellas(id_interno, arreglo_capturas, arreglo); 
+    xajax_guardarHuellas(id_interno, datos.arreglo_capturas, datos.arreglo);
 });
 
 $('#btnGuardarContinuar').click(function(){
     var id_interno = $('#id_interno').val();
-    var imagenes = $('#resultados img');
     var siguiente_paso = $('#siguiente_paso').val();
-    // Ver nota análoga en btnGuardar -- permite continuar si el operador omitió los 10 dedos.
-    if($('#resultados img').length<=0 && $('#contenedor_captura_huellas input:checked').length>0){
-        mostrarError("No se encontraron huellas capturadas");
+    var datos = buildFixedPositionArrays();
+    // Ver nota análoga en btnGuardar.
+    if (datos.faltaAlguna) {
+        mostrarError("Falta capturar huellas");
         return false;
     }
-    var arreglo = [];
-    $.each( imagenes, function( key, value ) {
-      arreglo.push($(this).attr('src'));
-    });
-    var arreglo_capturas = [];
-    $('#contenedor_captura_huellas input:checked').each(function() {
-        arreglo_capturas.push($(this).attr('id'));
-    });
-    if(arreglo_capturas.length!=arreglo.length){
-        mostrarError("Falta capturar huellas");
-        return false;        
-    }        
     mostrarEspera();
-    xajax_guardarHuellasContinuar(id_interno, arreglo_capturas, arreglo, siguiente_paso); 
+    xajax_guardarHuellasContinuar(id_interno, datos.arreglo_capturas, datos.arreglo, siguiente_paso);
 });
 
     // Handshake original con "AdminAware" (servicio nativo que había que apagar/reencender
