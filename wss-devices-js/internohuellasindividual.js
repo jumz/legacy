@@ -123,12 +123,18 @@ function onAutocaptureStatus(status) {
     autocaptureStatus.innerText = FingerprintCaptureApi.AutocaptureStatus[status];
 }
 
-// Adds an image to the end of the document
-function appendImage(imageData)
+// Adds an image to the end of the document. `fingerCode` (FingerprintCaptureApi.Finger, ej.
+// LEFT_LITTLE_FINGER) es opcional -- pedido explícito del usuario, 2026-09-25 ("aplica lo mismo
+// para internohuellasindividual.php"), mismo fix que internohuellas.php: el backend
+// (internohuellas.inc.php) espera SIEMPRE los 10 elementos de arreglo_capturas/arreglo en
+// posición fija; con esta etiqueta se puede reconstruir esa lista fija sin depender del orden
+// de llegada de las imágenes (ver btnGuardar/btnGuardarContinuar).
+function appendImage(imageData, fingerCode)
 {
     document.body.appendChild(document.createElement("br"));
     var img = document.createElement("img");
     img.src = "data:image/jpg;base64," + imageData;
+    if (fingerCode !== undefined) img.dataset.fingerCode = fingerCode;
     document.getElementById('resultados').appendChild(img);
 }
 
@@ -141,65 +147,65 @@ function onCapturedImage(base64Image) {
     collectedImages[impression] = base64Image;
     setComponent.setFingerprintCaptureImage(impression, captureComponent).then(function () {        
         if (impression === FingerprintCaptureApi.Impression.PLAIN_LEFT_LITTLE_FINGER)
-        {            
+        {
             setComponent.getSegmentedImage(FingerprintSetApi.Impression.PLAIN_LEFT_LITTLE_FINGER,
                 FingerprintSetApi.ImageFormat.PNG).then( function(imageData){
-                appendImage(imageData);
+                appendImage(imageData, FingerprintCaptureApi.Finger.LEFT_LITTLE_FINGER);
             });
         }else if(impression === FingerprintCaptureApi.Impression.PLAIN_LEFT_RING_FINGER)
         {
             setComponent.getSegmentedImage(FingerprintSetApi.Impression.PLAIN_LEFT_RING_FINGER,
                 FingerprintSetApi.ImageFormat.PNG).then( function(imageData){
-                appendImage(imageData);
-            });            
+                appendImage(imageData, FingerprintCaptureApi.Finger.LEFT_RING_FINGER);
+            });
         }else if(impression === FingerprintCaptureApi.Impression.PLAIN_LEFT_MIDDLE_FINGER)
         {
             setComponent.getSegmentedImage(FingerprintSetApi.Impression.PLAIN_LEFT_MIDDLE_FINGER,
                 FingerprintSetApi.ImageFormat.PNG).then( function(imageData){
-                appendImage(imageData);
-            });            
+                appendImage(imageData, FingerprintCaptureApi.Finger.LEFT_MIDDLE_FINGER);
+            });
         }else if(impression === FingerprintCaptureApi.Impression.PLAIN_LEFT_INDEX_FINGER)
         {
             setComponent.getSegmentedImage(FingerprintSetApi.Impression.PLAIN_LEFT_INDEX_FINGER,
                 FingerprintSetApi.ImageFormat.PNG).then( function(imageData){
-                appendImage(imageData);
-            });            
+                appendImage(imageData, FingerprintCaptureApi.Finger.LEFT_INDEX_FINGER);
+            });
         }else if(impression === FingerprintCaptureApi.Impression.PLAIN_LEFT_THUMB)
         {
             setComponent.getSegmentedImage(FingerprintSetApi.Impression.PLAIN_LEFT_THUMB,
                 FingerprintSetApi.ImageFormat.PNG).then( function(imageData){
-                appendImage(imageData);
-            });            
+                appendImage(imageData, FingerprintCaptureApi.Finger.LEFT_THUMB);
+            });
         }else if (impression === FingerprintCaptureApi.Impression.PLAIN_RIGHT_LITTLE_FINGER)
-        {            
+        {
             setComponent.getSegmentedImage(FingerprintSetApi.Impression.PLAIN_RIGHT_LITTLE_FINGER,
                 FingerprintSetApi.ImageFormat.PNG).then( function(imageData){
-                appendImage(imageData);
+                appendImage(imageData, FingerprintCaptureApi.Finger.RIGHT_LITTLE_FINGER);
             });
         }else if(impression === FingerprintCaptureApi.Impression.PLAIN_RIGHT_RING_FINGER)
         {
             setComponent.getSegmentedImage(FingerprintSetApi.Impression.PLAIN_RIGHT_RING_FINGER,
                 FingerprintSetApi.ImageFormat.PNG).then( function(imageData){
-                appendImage(imageData);
-            });            
+                appendImage(imageData, FingerprintCaptureApi.Finger.RIGHT_RING_FINGER);
+            });
         }else if(impression === FingerprintCaptureApi.Impression.PLAIN_RIGHT_MIDDLE_FINGER)
         {
             setComponent.getSegmentedImage(FingerprintSetApi.Impression.PLAIN_RIGHT_MIDDLE_FINGER,
                 FingerprintSetApi.ImageFormat.PNG).then( function(imageData){
-                appendImage(imageData);
-            });            
+                appendImage(imageData, FingerprintCaptureApi.Finger.RIGHT_MIDDLE_FINGER);
+            });
         }else if(impression === FingerprintCaptureApi.Impression.PLAIN_RIGHT_INDEX_FINGER)
         {
             setComponent.getSegmentedImage(FingerprintSetApi.Impression.PLAIN_RIGHT_INDEX_FINGER,
                 FingerprintSetApi.ImageFormat.PNG).then( function(imageData){
-                appendImage(imageData);
-            });            
+                appendImage(imageData, FingerprintCaptureApi.Finger.RIGHT_INDEX_FINGER);
+            });
         }else if(impression === FingerprintCaptureApi.Impression.PLAIN_RIGHT_THUMB)
         {
             setComponent.getSegmentedImage(FingerprintSetApi.Impression.PLAIN_RIGHT_THUMB,
                 FingerprintSetApi.ImageFormat.PNG).then( function(imageData){
-                appendImage(imageData);
-            });            
+                appendImage(imageData, FingerprintCaptureApi.Finger.RIGHT_THUMB);
+            });
         }
 
 
@@ -472,51 +478,68 @@ $('.huellas').click(function(){
 
 });
 
+// El backend (internohuellas.inc.php, fuera de este repo) espera SIEMPRE los 10 elementos de
+// arreglo_capturas/arreglo en posición FIJA (índice 0=meñique izq...9=pulgar der) -- mismo bug
+// y mismo fix ya confirmado en hardware real para internohuellas.php (ver ese archivo/README):
+// con menos de 10 (dedos desmarcados) el backend truena con "Undefined offset", y una cadena
+// vacía como placeholder también truena distinto (explode(',', '') sin coma que partir). Se
+// recorren TODOS los checkboxes (marcados o no) en orden de DOM, con un data-URI JPEG 1x1
+// placeholder válido para los que no tienen imagen. Pedido explícito del usuario, 2026-09-25.
+var CHECKBOX_TO_FINGER = {
+    menique_mano_izquierda: FingerprintCaptureApi.Finger.LEFT_LITTLE_FINGER,
+    anular_mano_izquierda: FingerprintCaptureApi.Finger.LEFT_RING_FINGER,
+    medio_mano_izquierda: FingerprintCaptureApi.Finger.LEFT_MIDDLE_FINGER,
+    indice_mano_izquierda: FingerprintCaptureApi.Finger.LEFT_INDEX_FINGER,
+    pulgar_mano_izquierda: FingerprintCaptureApi.Finger.LEFT_THUMB,
+    menique_mano_derecha: FingerprintCaptureApi.Finger.RIGHT_LITTLE_FINGER,
+    anular_mano_derecha: FingerprintCaptureApi.Finger.RIGHT_RING_FINGER,
+    medio_mano_derecha: FingerprintCaptureApi.Finger.RIGHT_MIDDLE_FINGER,
+    indice_mano_derecha: FingerprintCaptureApi.Finger.RIGHT_INDEX_FINGER,
+    pulgar_mano_derecha: FingerprintCaptureApi.Finger.RIGHT_THUMB
+};
+
+var PLACEHOLDER_JPEG_DATA_URI =
+    "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/9oACAEBAAA/APf6/9k=";
+
+function buildFixedPositionArrays() {
+    var arreglo_capturas = [];
+    var arreglo = [];
+    var faltaAlguna = false;
+    $('#contenedor_captura_huellas input.huellas').each(function () {
+        var checkboxId = $(this).attr('id');
+        var isChecked = $(this).is(':checked');
+        arreglo_capturas.push(checkboxId);
+        var fingerCode = CHECKBOX_TO_FINGER[checkboxId];
+        var img = fingerCode !== undefined
+            ? $('#resultados img[data-finger-code="' + fingerCode + '"]')
+            : $();
+        if (isChecked && img.length === 0) faltaAlguna = true;
+        arreglo.push(img.length ? img.attr('src') : PLACEHOLDER_JPEG_DATA_URI);
+    });
+    return { arreglo_capturas: arreglo_capturas, arreglo: arreglo, faltaAlguna: faltaAlguna };
+}
+
 $('#btnGuardar').click(function(){
     var id_interno = $('#id_interno').val();
-    var imagenes = $('#resultados img');
-    if($('#resultados img').length<=0){
-        mostrarError("No se encontraron huellas capturadas");
-        return false;
-    }    
-    var arreglo = [];
-    $.each( imagenes, function( key, value ) {
-      arreglo.push($(this).attr('src'));
-    });
-    var arreglo_capturas = [];
-    $('#contenedor_captura_huellas input:checked').each(function() {
-        arreglo_capturas.push($(this).attr('id'));
-    });
-    if(arreglo_capturas.length!=arreglo.length){
+    var datos = buildFixedPositionArrays();
+    if (datos.faltaAlguna) {
         mostrarError("Falta capturar huellas");
-        return false;        
+        return false;
     }
     mostrarEspera();
-    xajax_guardarHuellas(id_interno, arreglo_capturas, arreglo); 
+    xajax_guardarHuellas(id_interno, datos.arreglo_capturas, datos.arreglo);
 });
 
 $('#btnGuardarContinuar').click(function(){
     var id_interno = $('#id_interno').val();
-    var imagenes = $('#resultados img');
     var siguiente_paso = $('#siguiente_paso').val();
-    if($('#resultados img').length<=0){
-        mostrarError("No se encontraron huellas capturadas");
+    var datos = buildFixedPositionArrays();
+    if (datos.faltaAlguna) {
+        mostrarError("Falta capturar huellas");
         return false;
     }
-    var arreglo = [];
-    $.each( imagenes, function( key, value ) {
-      arreglo.push($(this).attr('src'));
-    });
-    var arreglo_capturas = [];
-    $('#contenedor_captura_huellas input:checked').each(function() {
-        arreglo_capturas.push($(this).attr('id'));
-    });
-    if(arreglo_capturas.length!=arreglo.length){
-        mostrarError("Falta capturar huellas");
-        return false;        
-    }        
     mostrarEspera();
-    xajax_guardarHuellasContinuar(id_interno, arreglo_capturas, arreglo, siguiente_paso); 
+    xajax_guardarHuellasContinuar(id_interno, datos.arreglo_capturas, datos.arreglo, siguiente_paso);
 });
 
     // Handshake original con "AdminAware" (servicio nativo que había que apagar/reencender
