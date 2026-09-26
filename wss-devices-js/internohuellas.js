@@ -400,8 +400,17 @@ $('.huellas').click(function () {
 // empezó a devolver MENOS de 10, y el backend tronaba con "Undefined offset" al leer una
 // posición (típicamente 8/9, los pulgares) que ya no existía -- confirmado viendo el error real
 // en la respuesta del servidor. Se recorren TODOS los checkboxes (marcados o no) en orden de
-// DOM -- el mismo orden que ya usaba el backend -- y se manda '' como imagen para los omitidos
-// en vez de acortar el arreglo. Pedido explícito del usuario, 2026-09-25.
+// DOM -- el mismo orden que ya usaba el backend.
+//
+// Segunda vuelta, confirmado con el error real del servidor: mandar '' (cadena vacía) para los
+// omitidos tampoco sirve -- el backend hace algo como explode(',', $dataUri) para separar el
+// prefijo "data:image/jpg;base64," del payload; con '' no hay coma que partir, así que truena
+// con "Undefined offset: 1" en vez de "Undefined offset: 8/9" (mismo síntoma, otro punto del
+// mismo backend). Se manda un data-URI JPEG 1x1 VÁLIDO (generado y verificado -- no inventado a
+// mano) como placeholder para los omitidos, en vez de una cadena vacía.
+var PLACEHOLDER_JPEG_DATA_URI =
+    "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/9oACAEBAAA/APf6/9k=";
+
 function buildFixedPositionArrays() {
     var arreglo_capturas = [];
     var arreglo = [];
@@ -415,7 +424,7 @@ function buildFixedPositionArrays() {
             ? $('#resultados img[data-finger-code="' + fingerCode + '"]')
             : $();
         if (isChecked && img.length === 0) faltaAlguna = true;
-        arreglo.push(img.length ? img.attr('src') : '');
+        arreglo.push(img.length ? img.attr('src') : PLACEHOLDER_JPEG_DATA_URI);
     });
     return { arreglo_capturas: arreglo_capturas, arreglo: arreglo, faltaAlguna: faltaAlguna };
 }
