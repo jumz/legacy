@@ -351,12 +351,21 @@ $('.huellas').click(function () {
         return captureComponent.setFingerMissing(fingerCode, !isChecked);
     });
 
-    // Si el grupo que se está armando/capturando AHORA MISMO quedó completamente omitido,
-    // cancela esa captura y salta directo al siguiente grupo -- pedido explícito del usuario:
-    // "va a pasar directo a la mano derecha". Si el grupo completado no es el actual, ya queda
-    // registrado en missingFingers y se salta solo cuando le toque su turno (ver
-    // isImpressionFullyOmitted en startPreview), sin interrumpir nada.
-    if (isImpressionFullyOmitted(impressionsToCapture[impressionsIndex])) {
+    // Si el dedo que se acaba de (des)marcar pertenece al grupo que se está armando/capturando
+    // AHORA MISMO, hay que reiniciar esa captura -- pedido explícito del usuario: "cada que se
+    // desmarca un dedo debe reiniciar la captura". No basta con reiniciar solo cuando el grupo
+    // queda completamente omitido: la captura YA ARMADA sigue usando el conteo mínimo y los
+    // LEDs que tenía al momento de armarse (RS_SetMinimumFinger/RS_SetFingerLED ya se mandaron
+    // al puente) -- sin reiniciar, el LED físico se queda desactualizado aunque el diagrama SVG
+    // (que sí observa #prompt/missingFingers en vivo) ya se pinte correctamente. Al volver a
+    // llamar startPreview(), aw_fingerprint_capture_start_auto_capture (WebsocketTransport.js)
+    // recalcula omittedFingers con el estado actual y arma de nuevo con el LED/mínimo correctos
+    // -- si el grupo quedó completamente omitido, startPreview() ya lo salta solo (ver
+    // isImpressionFullyOmitted arriba). Si el dedo pertenece a un grupo QUE TODAVÍA NO le toca
+    // su turno, no hace falta reiniciar nada -- ya queda registrado en missingFingers y se
+    // aplica solo cuando le toque (mismo comentario de antes).
+    var currentPositions = getPositions(impressionsToCapture[impressionsIndex]);
+    if (currentPositions.indexOf(fingerCode) !== -1) {
         captureComponent.endAutoCapture().then(function () {
             startPreview();
         });
