@@ -417,25 +417,30 @@ document.addEventListener("DOMContentLoaded", function () {
 $('.huellas').click(function(){
     mostrarEspera();
     var actual = $(this).attr('id');
-    if(actual=='menique_mano_izquierda'){
+    // Bug real encontrado (2026-09-25): comparaba contra ids SIN el sufijo "_rolada" -- los
+    // ids reales de los checkboxes en esta página SÍ lo llevan (ver internohuellasroladas.php,
+    // $huella['campo'].'_rolada'), así que este if/else nunca coincidía con nada, `impression`
+    // se quedaba undefined, y desmarcar un dedo no hacía nada (ni apagaba su LED ni pedía el
+    // siguiente). Confirmado por el usuario: "al desmarcar un check ... debe dejar de pedirlo".
+    if(actual=='menique_mano_izquierda_rolada'){
         var impression = FingerprintSetApi.Impression.ROLLED_LEFT_LITTLE_FINGER;
-    }else if(actual=='anular_mano_izquierda'){
+    }else if(actual=='anular_mano_izquierda_rolada'){
         var impression = FingerprintSetApi.Impression.ROLLED_LEFT_RING_FINGER;
-    }else if(actual=='medio_mano_izquierda'){
+    }else if(actual=='medio_mano_izquierda_rolada'){
         var impression = FingerprintSetApi.Impression.ROLLED_LEFT_MIDDLE_FINGER;
-    }else if(actual=='indice_mano_izquierda'){
+    }else if(actual=='indice_mano_izquierda_rolada'){
         var impression = FingerprintSetApi.Impression.ROLLED_LEFT_INDEX_FINGER;
-    }else if(actual=='pulgar_mano_izquierda'){
+    }else if(actual=='pulgar_mano_izquierda_rolada'){
         var impression = FingerprintSetApi.Impression.ROLLED_LEFT_THUMB;
-    }else if(actual=='menique_mano_derecha'){
+    }else if(actual=='menique_mano_derecha_rolada'){
         var impression = FingerprintSetApi.Impression.ROLLED_RIGHT_LITTLE_FINGER;
-    }else if(actual=='anular_mano_derecha'){
+    }else if(actual=='anular_mano_derecha_rolada'){
         var impression = FingerprintSetApi.Impression.ROLLED_RIGHT_RING_FINGER;
-    }else if(actual=='medio_mano_derecha'){
+    }else if(actual=='medio_mano_derecha_rolada'){
         var impression = FingerprintSetApi.Impression.ROLLED_RIGHT_MIDDLE_FINGER;
-    }else if(actual=='indice_mano_derecha'){
+    }else if(actual=='indice_mano_derecha_rolada'){
         var impression = FingerprintSetApi.Impression.ROLLED_RIGHT_INDEX_FINGER;
-    }else if(actual=='pulgar_mano_derecha'){
+    }else if(actual=='pulgar_mano_derecha_rolada'){
         var impression = FingerprintSetApi.Impression.ROLLED_RIGHT_THUMB;
     }
     $(this).attr('disabled','true');
