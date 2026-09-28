@@ -455,10 +455,28 @@ $('.huellas').click(function(){
         // muerto, así que volver a marcar un dedo nunca se lo avisaba al backend/al puente.
         var idx = missingFingers.indexOf(impression);
         if (idx !== -1) missingFingers.splice(idx, 1);
+        // Si el dedo que se vuelve a marcar está ANTES de la posición actual de la secuencia
+        // (ya se saltó de largo por estar desmarcado), hay que retroceder y volver a pedirlo --
+        // pedido explícito del usuario, 2026-09-25: al volver a marcar el meñique (ya saltado),
+        // el LED/imagen se quedaban en el dedo que se estaba pidiendo (medio), no volvían al
+        // meñique. Solo aplica si de verdad se saltó (posición < impressionsIndex) -- si es un
+        // dedo que todavía no le toca su turno, no hace falta tocar nada.
+        var impressionPosition = impressionsToCapture.indexOf(impression);
+        var needsRewind = impressionPosition !== -1 && impressionPosition < impressionsIndex;
         setComponent.setFingerMissing(impression, false).then(function(){
         return captureComponent.setFingerMissing(impression, false);
         }).then(function () {
             console.log("HABILITADO");
+            if (!needsRewind) return;
+            captureComponent.endAutoCapture().then(function () {
+                setComponent.reset().then(function () {
+                    return captureComponent.resetMissingFingers();
+                }).then(function () {
+                    impressionsIndex = impressionPosition;
+                    startPreview();
+                    ocultarMensaje();
+                });
+            });
         });
     }else{
         // Se registra por VALOR (missingFingers), no por posición -- ver advanceToNextCapturable()
