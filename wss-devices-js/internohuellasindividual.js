@@ -442,14 +442,19 @@ $('.huellas').click(function(){
     }else if(actual=='pulgar_mano_derecha'){
         var impression = FingerprintSetApi.Impression.PLAIN_RIGHT_THUMB;
     }
-    $(this).attr('disabled','true');
+    // Antes se deshabilitaba el checkbox aquí en CUALQUIER clic (marcar o desmarcar) --
+    // pedido explícito del usuario, 2026-09-25: "no puedo volver a marcar un dedo como si
+    // estuviera desactivado". Se quita para poder alternar libremente.
     if($(this).is(":checked")){
-        return false;
+        // Antes había un "return false;" antes de esta llamada -- la dejaba como código
+        // muerto, así que volver a marcar un dedo nunca se lo avisaba al backend/al puente.
+        var idx = missingFingers.indexOf(impression);
+        if (idx !== -1) missingFingers.splice(idx, 1);
         setComponent.setFingerMissing(impression, false).then(function(){
         return captureComponent.setFingerMissing(impression, false);
         }).then(function () {
             console.log("HABILITADO");
-        });        
+        });
     }else{
         // Se registra por VALOR (missingFingers), no por posición -- antes esto hacía
         // impressionsIndex++ a ciegas, así que desmarcar VARIAS casillas desincronizaba la
