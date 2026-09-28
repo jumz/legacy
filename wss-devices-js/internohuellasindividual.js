@@ -415,7 +415,11 @@ document.addEventListener("DOMContentLoaded", function () {
     connect();
 });
 $('.huellas').click(function(){
-    mostrarEspera();
+    // Se quita mostrarEspera() aquí -- pedido explícito del usuario, 2026-09-25: (des)marcar
+    // un dedo no debe mostrar el modal "Procesando..." (que además se quedaba pegado sin
+    // cerrarse cuando el dedo (des)marcado no era el que se está pidiendo ahora mismo, ya que
+    // ese camino nunca llama ocultarMensaje()). No afecta btnGuardar/btnGuardarContinuar/
+    // connect(), que tienen sus propias llamadas a mostrarEspera() sin tocar.
     var actual = $(this).attr('id');
     if(actual=='menique_mano_izquierda'){
         var impression = FingerprintSetApi.Impression.PLAIN_LEFT_LITTLE_FINGER;

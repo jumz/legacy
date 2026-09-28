@@ -415,7 +415,11 @@ document.addEventListener("DOMContentLoaded", function () {
     connect();
 });
 $('.huellas').click(function(){
-    mostrarEspera();
+    // Se quita mostrarEspera() aquí -- pedido explícito del usuario, 2026-09-25: (des)marcar
+    // un dedo no debe mostrar el modal "Procesando..." (que además se quedaba pegado sin
+    // cerrarse cuando el dedo (des)marcado no era el que se está pidiendo ahora mismo, ya que
+    // ese camino nunca llama ocultarMensaje()). No afecta btnGuardar/btnGuardarContinuar/
+    // connect(), que tienen sus propias llamadas a mostrarEspera() sin tocar.
     var actual = $(this).attr('id');
     // Bug real encontrado (2026-09-25): comparaba contra ids SIN el sufijo "_rolada" -- los
     // ids reales de los checkboxes en esta página SÍ lo llevan (ver internohuellasroladas.php,
