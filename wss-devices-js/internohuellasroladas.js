@@ -122,19 +122,63 @@ function onAutocaptureStatus(status) {
     autocaptureStatus.innerText = FingerprintCaptureApi.AutocaptureStatus[status];
 }
 
-// Adds an image to the end of the document. `fingerCode` (FingerprintCaptureApi.Finger, ej.
-// LEFT_LITTLE_FINGER) es opcional -- pedido explícito del usuario, 2026-09-25 ("aplica lo mismo
-// para internohuellasroladas.php"), mismo fix que internohuellas.php: el backend
-// (internohuellas.inc.php) espera SIEMPRE los 10 elementos de arreglo_capturas/arreglo en
-// posición fija; con esta etiqueta se puede reconstruir esa lista fija sin depender del orden
-// de llegada de las imágenes (ver btnGuardar/btnGuardarContinuar).
+// Rellena la tarjeta YA EXISTENTE en la cuadrícula de #resultados (ver
+// internohuellasroladas.php) en vez de crear un <img> nuevo y agregarlo al final -- mismo
+// rediseño ya confirmado en hardware para internohuellas.php ("aplica esto mismo para la
+// lectura individual y para huellas roladas"), pedido explícito del usuario, 2026-09-29.
 function appendImage(imageData, fingerCode)
 {
-    document.body.appendChild(document.createElement("br"));
-    var img = document.createElement("img");
+    if (fingerCode === undefined) return;
+    var img = document.querySelector('#resultados img[data-finger-code="' + fingerCode + '"]');
+    if (!img) return;
     img.src = "data:image/jpg;base64," + imageData;
-    if (fingerCode !== undefined) img.dataset.fingerCode = fingerCode;
-    document.getElementById('resultados').appendChild(img);
+    img.style.display = "";
+    var placeholder = img.parentElement ? img.parentElement.querySelector('.huella-card-placeholder') : null;
+    if (placeholder) placeholder.style.display = "none";
+}
+
+// Vacía (vuelve a mostrar el placeholder gris) la tarjeta de UN dedo -- aquí cada botón
+// "Recapturar" pide un solo dedo, no un grupo. Pedido explícito del usuario, 2026-09-29.
+function clearFingerImage(fingerCode) {
+    var img = document.querySelector('#resultados img[data-finger-code="' + fingerCode + '"]');
+    if (!img) return;
+    img.removeAttribute('src');
+    img.style.display = "none";
+    var placeholder = img.parentElement ? img.parentElement.querySelector('.huella-card-placeholder') : null;
+    if (placeholder) placeholder.style.display = "";
+}
+
+// FingerprintCaptureApi.Finger (código de la tarjeta) -> FingerprintCaptureApi.Impression
+// ROLLED_* (valor que usa impressionsToCapture en esta página) -- necesario para encontrar la
+// POSICIÓN del dedo pedido.
+var FINGER_CODE_TO_IMPRESSION = {};
+FINGER_CODE_TO_IMPRESSION[FingerprintCaptureApi.Finger.LEFT_LITTLE_FINGER] = FingerprintCaptureApi.Impression.ROLLED_LEFT_LITTLE_FINGER;
+FINGER_CODE_TO_IMPRESSION[FingerprintCaptureApi.Finger.LEFT_RING_FINGER] = FingerprintCaptureApi.Impression.ROLLED_LEFT_RING_FINGER;
+FINGER_CODE_TO_IMPRESSION[FingerprintCaptureApi.Finger.LEFT_MIDDLE_FINGER] = FingerprintCaptureApi.Impression.ROLLED_LEFT_MIDDLE_FINGER;
+FINGER_CODE_TO_IMPRESSION[FingerprintCaptureApi.Finger.LEFT_INDEX_FINGER] = FingerprintCaptureApi.Impression.ROLLED_LEFT_INDEX_FINGER;
+FINGER_CODE_TO_IMPRESSION[FingerprintCaptureApi.Finger.LEFT_THUMB] = FingerprintCaptureApi.Impression.ROLLED_LEFT_THUMB;
+FINGER_CODE_TO_IMPRESSION[FingerprintCaptureApi.Finger.RIGHT_LITTLE_FINGER] = FingerprintCaptureApi.Impression.ROLLED_RIGHT_LITTLE_FINGER;
+FINGER_CODE_TO_IMPRESSION[FingerprintCaptureApi.Finger.RIGHT_RING_FINGER] = FingerprintCaptureApi.Impression.ROLLED_RIGHT_RING_FINGER;
+FINGER_CODE_TO_IMPRESSION[FingerprintCaptureApi.Finger.RIGHT_MIDDLE_FINGER] = FingerprintCaptureApi.Impression.ROLLED_RIGHT_MIDDLE_FINGER;
+FINGER_CODE_TO_IMPRESSION[FingerprintCaptureApi.Finger.RIGHT_INDEX_FINGER] = FingerprintCaptureApi.Impression.ROLLED_RIGHT_INDEX_FINGER;
+FINGER_CODE_TO_IMPRESSION[FingerprintCaptureApi.Finger.RIGHT_THUMB] = FingerprintCaptureApi.Impression.ROLLED_RIGHT_THUMB;
+
+// Vuelve a pedir UN SOLO dedo -- pedido explícito del usuario, 2026-09-29: "en este caso solo
+// debe solicitar el dedo al que se le esta indicando la recaptura". Función global (este
+// archivo no tiene wrapper de módulo) -- llamada desde internohuellasroladas.php.
+var recaptureTargetIndex = null;
+function recapturarDedo(fingerCode) {
+    var impression = FINGER_CODE_TO_IMPRESSION[fingerCode];
+    if (impression === undefined) return;
+    var position = impressionsToCapture.indexOf(impression);
+    if (position === -1) return;
+    if (missingFingers.indexOf(impression) !== -1) return;
+    clearFingerImage(fingerCode);
+    recaptureTargetIndex = position;
+    captureComponent.endAutoCapture().then(function () {
+        impressionsIndex = position;
+        startPreview();
+    });
 }
 
 // Handler for receiving the final captured image
@@ -207,6 +251,16 @@ function onCapturedImage(base64Image) {
             });
         }
 
+        // Si esta captura fue una recaptura puntual de un solo dedo (botón "Recapturar" de
+        // internohuellasroladas.php), NO hay que seguir la secuencia normal hacia el
+        // SIGUIENTE dedo. Pedido explícito del usuario, 2026-09-29.
+        if (recaptureTargetIndex !== null) {
+            recaptureTargetIndex = null;
+            impressionsIndex = impressionsToCapture.length;
+            promptElement.innerText = "";
+            statusElement.innerText = "Captura finalizada.";
+            return;
+        }
 
         impressionsIndex++;
         advanceToNextCapturable();
@@ -542,8 +596,13 @@ function buildFixedPositionArrays() {
         var img = fingerCode !== undefined
             ? $('#resultados img[data-finger-code="' + fingerCode + '"]')
             : $();
-        if (isChecked && img.length === 0) faltaAlguna = true;
-        arreglo.push(img.length ? img.attr('src') : PLACEHOLDER_JPEG_DATA_URI);
+        // El <img> de cada tarjeta ya existe SIEMPRE en el DOM desde que carga la página (ver
+        // internohuellasroladas.php, cuadrícula de resultados, pedido del usuario 2026-09-29)
+        // -- antes solo existía una vez capturado, así que "el elemento existe" ya no sirve
+        // para saber si hay una imagen real. Se revisa que además tenga "src".
+        var hasImage = img.length > 0 && !!img.attr('src');
+        if (isChecked && !hasImage) faltaAlguna = true;
+        arreglo.push(hasImage ? img.attr('src') : PLACEHOLDER_JPEG_DATA_URI);
     });
     return { arreglo_capturas: arreglo_capturas, arreglo: arreglo, faltaAlguna: faltaAlguna };
 }
