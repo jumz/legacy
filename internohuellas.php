@@ -285,8 +285,16 @@ include(FOLDER_HTML . 'include/header.php');
           // página usa para observar #prompt, solo que aquí SÍ hace falta invocar una función
           // real de la vista previa/captura, no solo leer el DOM). Pedido explícito del
           // usuario, 2026-09-29.
-          $(document).on('click', '.btn-recapturar', function () {
-            var groupIndex = parseInt($(this).attr('data-group'), 10);
+          //
+          // Bug real confirmado (2026-09-29): se usó $(document).on(...) (jQuery) aquí, pero
+          // en este punto de la página jQuery TODAVÍA no está cargado ("$ is not defined" --
+          // confirmado en consola) -- se carga más abajo, junto con el resto de los <script>
+          // de la página. Se reemplaza por addEventListener en JS plano, que no depende de
+          // que jQuery ya esté disponible en este punto del documento.
+          document.addEventListener('click', function (event) {
+            var boton = event.target.closest('.btn-recapturar');
+            if (!boton) return;
+            var groupIndex = parseInt(boton.getAttribute('data-group'), 10);
             if (typeof recapturarGrupo === 'function') recapturarGrupo(groupIndex);
           });
         </script>
