@@ -181,7 +181,109 @@ include(FOLDER_HTML . 'include/header.php');
 
       <div class="contenedor_captura_huellas-resultados inms-card">
         <h3 class="title-divider"><i class="fa fa-image"></i> Resultados</h3>
-        <div id="resultados"></div>
+        <!-- Cuadrícula de 3 filas (izquierda/derecha/pulgares) en vez de una lista plana de
+             imágenes -- pedido explícito del usuario, 2026-09-29. Se mantiene el id
+             "resultados" y el atributo data-finger-code en cada <img> porque
+             buildFixedPositionArrays() (internohuellas.js) ya depende de
+             "#resultados img[data-finger-code=...]" para armar el guardado -- solo cambia
+             cómo se ve, no cómo se guarda. internohuellas.js ya NO crea <img> nuevos (ver
+             appendImage): ahora rellena el <img> que ya existe aquí, por código de dedo.
+             El botón "Recapturar" de cualquier dedo vuelve a pedir el grupo COMPLETO al que
+             pertenece (4 dedos en manos, 2 en pulgares) -- pedido explícito del usuario: "si
+             doy clic en 'recapturar' del dedo medio de la mano derecha se tienen que
+             recapturar los 4 dedos de la mano derecha". data-group coincide con la posición
+             en impressionsToCapture (0=izquierda, 1=derecha, 2=pulgares). -->
+        <div id="resultados" class="resultados-grid">
+          <div class="resultados-fila" data-group="0">
+            <div class="huella-card" data-finger-code="10">
+              <div class="huella-card-placeholder"></div>
+              <img data-finger-code="10" style="display:none;">
+              <div class="huella-card-label">Meñique<br>Mano Izquierda</div>
+              <button type="button" class="btn btn-sm btn-outline-secondary btn-recapturar" data-group="0">Recapturar</button>
+            </div>
+            <div class="huella-card" data-finger-code="9">
+              <div class="huella-card-placeholder"></div>
+              <img data-finger-code="9" style="display:none;">
+              <div class="huella-card-label">Anular<br>Mano Izquierda</div>
+              <button type="button" class="btn btn-sm btn-outline-secondary btn-recapturar" data-group="0">Recapturar</button>
+            </div>
+            <div class="huella-card" data-finger-code="8">
+              <div class="huella-card-placeholder"></div>
+              <img data-finger-code="8" style="display:none;">
+              <div class="huella-card-label">Medio<br>Mano Izquierda</div>
+              <button type="button" class="btn btn-sm btn-outline-secondary btn-recapturar" data-group="0">Recapturar</button>
+            </div>
+            <div class="huella-card" data-finger-code="7">
+              <div class="huella-card-placeholder"></div>
+              <img data-finger-code="7" style="display:none;">
+              <div class="huella-card-label">Índice<br>Mano Izquierda</div>
+              <button type="button" class="btn btn-sm btn-outline-secondary btn-recapturar" data-group="0">Recapturar</button>
+            </div>
+          </div>
+          <div class="resultados-fila" data-group="1">
+            <div class="huella-card" data-finger-code="5">
+              <div class="huella-card-placeholder"></div>
+              <img data-finger-code="5" style="display:none;">
+              <div class="huella-card-label">Meñique<br>Mano Derecha</div>
+              <button type="button" class="btn btn-sm btn-outline-secondary btn-recapturar" data-group="1">Recapturar</button>
+            </div>
+            <div class="huella-card" data-finger-code="4">
+              <div class="huella-card-placeholder"></div>
+              <img data-finger-code="4" style="display:none;">
+              <div class="huella-card-label">Anular<br>Mano Derecha</div>
+              <button type="button" class="btn btn-sm btn-outline-secondary btn-recapturar" data-group="1">Recapturar</button>
+            </div>
+            <div class="huella-card" data-finger-code="3">
+              <div class="huella-card-placeholder"></div>
+              <img data-finger-code="3" style="display:none;">
+              <div class="huella-card-label">Medio<br>Mano Derecha</div>
+              <button type="button" class="btn btn-sm btn-outline-secondary btn-recapturar" data-group="1">Recapturar</button>
+            </div>
+            <div class="huella-card" data-finger-code="2">
+              <div class="huella-card-placeholder"></div>
+              <img data-finger-code="2" style="display:none;">
+              <div class="huella-card-label">Índice<br>Mano Derecha</div>
+              <button type="button" class="btn btn-sm btn-outline-secondary btn-recapturar" data-group="1">Recapturar</button>
+            </div>
+          </div>
+          <div class="resultados-fila" data-group="2">
+            <div class="huella-card" data-finger-code="6">
+              <div class="huella-card-placeholder"></div>
+              <img data-finger-code="6" style="display:none;">
+              <div class="huella-card-label">Pulgar<br>Izquierdo</div>
+              <button type="button" class="btn btn-sm btn-outline-secondary btn-recapturar" data-group="2">Recapturar</button>
+            </div>
+            <div class="huella-card" data-finger-code="1">
+              <div class="huella-card-placeholder"></div>
+              <img data-finger-code="1" style="display:none;">
+              <div class="huella-card-label">Pulgar<br>Derecho</div>
+              <button type="button" class="btn btn-sm btn-outline-secondary btn-recapturar" data-group="2">Recapturar</button>
+            </div>
+          </div>
+        </div>
+        <style>
+          #resultados.resultados-grid { display: flex; flex-direction: column; gap: 14px; margin-top: 10px; }
+          #resultados .resultados-fila { display: flex; flex-wrap: wrap; gap: 12px; }
+          #resultados .huella-card { width: 92px; text-align: center; font-size: 11px; }
+          #resultados .huella-card img,
+          #resultados .huella-card-placeholder { width: 72px; height: 92px; border-radius: 4px; margin: 0 auto; }
+          #resultados .huella-card img { object-fit: cover; border: 1px solid #ccc; }
+          #resultados .huella-card-placeholder { background: #f0f0f0; border: 1px dashed #ccc; }
+          #resultados .huella-card-label { margin-top: 4px; color: #555; line-height: 1.2; }
+          #resultados .btn-recapturar { margin-top: 4px; font-size: 10px; padding: 2px 6px; }
+        </style>
+        <script>
+          // Delega el clic de "Recapturar" a recapturarGrupo(groupIndex), función global
+          // definida en internohuellas.js (ese archivo no tiene wrapper de módulo, así que ya
+          // expone sus variables/funciones como globales -- mismo patrón que el resto de esta
+          // página usa para observar #prompt, solo que aquí SÍ hace falta invocar una función
+          // real de la vista previa/captura, no solo leer el DOM). Pedido explícito del
+          // usuario, 2026-09-29.
+          $(document).on('click', '.btn-recapturar', function () {
+            var groupIndex = parseInt($(this).attr('data-group'), 10);
+            if (typeof recapturarGrupo === 'function') recapturarGrupo(groupIndex);
+          });
+        </script>
       </div>
 
     </section><!-- /fn contenedor capturar huellas -->

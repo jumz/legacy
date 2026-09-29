@@ -98,18 +98,60 @@ function onAutocaptureStatus(status) {
     autocaptureStatus.innerText = FingerprintCaptureApi.AutocaptureStatus[status];
 }
 
-// Adds an image to the end of the document. `fingerCode` (FingerprintCaptureApi.Finger, ej.
-// LEFT_LITTLE_FINGER) es opcional -- pedido explícito del usuario, 2026-09-25, para poder
-// encontrar la imagen de un dedo específico después (ver btnGuardar/btnGuardarContinuar), ya
-// que con dedos omitidos el orden de llegada/aparición en #resultados ya no corresponde 1:1
-// a la posición fija que espera el backend (internohuellas.inc.php).
+// Rellena la tarjeta YA EXISTENTE en la cuadrícula de #resultados (ver internohuellas.php) en
+// vez de crear un <img> nuevo y agregarlo al final -- pedido explícito del usuario, 2026-09-29:
+// mostrar los resultados en 3 filas (izquierda/derecha/pulgares) con nombre e imagen más
+// pequeña por dedo, no una lista plana. `fingerCode` (FingerprintCaptureApi.Finger, ej.
+// LEFT_LITTLE_FINGER) ya no es opcional en la práctica -- sin él no hay forma de saber en cuál
+// tarjeta poner la imagen. Se mantiene el parámetro opcional por compatibilidad con la única
+// llamada que no lo manda (dentro de onCapturedImage, rama de PLAIN_RIGHT_INDEX_FINGER --
+// código muerto heredado de una plantilla compartida: esa impresión nunca aparece en
+// impressionsToCapture de esta página, así que esa rama nunca corre en la práctica).
 function appendImage(imageData, fingerCode)
 {
-    document.body.appendChild(document.createElement("br"));
-    var img = document.createElement("img");
+    if (fingerCode === undefined) return;
+    var img = document.querySelector('#resultados img[data-finger-code="' + fingerCode + '"]');
+    if (!img) return;
     img.src = "data:image/jpg;base64," + imageData;
-    if (fingerCode !== undefined) img.dataset.fingerCode = fingerCode;
-    document.getElementById('resultados').appendChild(img);
+    img.style.display = "";
+    var placeholder = img.parentElement ? img.parentElement.querySelector('.huella-card-placeholder') : null;
+    if (placeholder) placeholder.style.display = "none";
+}
+
+// Vacía (vuelve a mostrar el placeholder gris) las tarjetas de un grupo -- pedido explícito
+// del usuario, 2026-09-29: al recapturar un grupo, las imágenes viejas de ESE grupo deben
+// desaparecer mientras se captura de nuevo, en vez de quedarse mostrando la huella anterior.
+function clearGroupImages(groupIndex) {
+    var fila = document.querySelector('#resultados .resultados-fila[data-group="' + groupIndex + '"]');
+    if (!fila) return;
+    fila.querySelectorAll('img[data-finger-code]').forEach(function (img) {
+        img.removeAttribute('src');
+        img.style.display = "none";
+        var placeholder = img.parentElement ? img.parentElement.querySelector('.huella-card-placeholder') : null;
+        if (placeholder) placeholder.style.display = "";
+    });
+}
+
+// Vuelve a pedir el grupo COMPLETO (4 dedos en manos, 2 en pulgares) al que pertenece
+// cualquiera de sus dedos -- pedido explícito del usuario, 2026-09-29: "si doy clic en
+// 'recapturar' del dedo medio de la mano derecha se tienen que recapturar los 4 dedos de la
+// mano derecha". `groupIndex` es la posición en impressionsToCapture (0=izquierda,
+// 1=derecha, 2=pulgares) -- llamada desde internohuellas.php (botón "Recapturar" de cada
+// tarjeta), función global porque este archivo no tiene wrapper de módulo.
+var recaptureTargetIndex = null;
+function recapturarGrupo(groupIndex) {
+    if (groupIndex < 0 || groupIndex >= impressionsToCapture.length) return;
+    // Si el grupo está completamente omitido (todos sus checkboxes desmarcados),
+    // startPreview() lo saltaría de largo sin nunca llegar a onCapturedImage -- dejando
+    // recaptureTargetIndex pegado y rompiendo el encadenado normal de la SIGUIENTE captura
+    // real. No tiene sentido "recapturar" algo que el operador marcó como omitido.
+    if (isImpressionFullyOmitted(impressionsToCapture[groupIndex])) return;
+    clearGroupImages(groupIndex);
+    recaptureTargetIndex = groupIndex;
+    captureComponent.endAutoCapture().then(function () {
+        impressionsIndex = groupIndex;
+        startPreview();
+    });
 }
 
 // Handler for receiving the final captured image
@@ -139,6 +181,19 @@ function onCapturedImage(base64Image) {
         else if (impression === FingerprintCaptureApi.Impression.PLAIN_DUAL_THUMBS)
         {
             getSegments();
+        }
+
+        // Si esta captura fue una recaptura puntual de un solo grupo (botón "Recapturar" de
+        // internohuellas.php), NO hay que seguir la secuencia normal hacia el SIGUIENTE grupo
+        // -- eso volvería a pedir grupos que ya estaban bien, solo porque se recapturó otro.
+        // Se marca "terminado" y se limpia la bandera, sin encadenar. Pedido explícito del
+        // usuario, 2026-09-29.
+        if (recaptureTargetIndex !== null) {
+            recaptureTargetIndex = null;
+            impressionsIndex = impressionsToCapture.length;
+            promptElement.innerText = "";
+            statusElement.innerText = "Captura finalizada.";
+            return;
         }
 
         impressionsIndex++;
@@ -290,6 +345,7 @@ function EnableMarkMissing(enable) {
 function onReset() {
     statusElement.innerText = "Reiniciando...";
     EnableMarkMissing(false);
+    recaptureTargetIndex = null;
     captureComponent.endAutoCapture().then(function () {
         setComponent.reset().then(function () {
             return captureComponent.resetMissingFingers();
@@ -298,7 +354,13 @@ function onReset() {
             startPreview();
         });
     });
-    $('#resultados').html('');
+    // Antes hacía $('#resultados').html('') -- borraba la CUADRÍCULA entera (internohuellas.php,
+    // pedido del usuario 2026-09-29), no solo las imágenes, dejando #resultados vacío y sin
+    // tarjetas donde appendImage pudiera volver a poner algo. Se limpian los 3 grupos por
+    // separado en su lugar, conservando la estructura.
+    clearGroupImages(0);
+    clearGroupImages(1);
+    clearGroupImages(2);
 }
 
 function loadConfig() {
@@ -423,8 +485,13 @@ function buildFixedPositionArrays() {
         var img = fingerCode !== undefined
             ? $('#resultados img[data-finger-code="' + fingerCode + '"]')
             : $();
-        if (isChecked && img.length === 0) faltaAlguna = true;
-        arreglo.push(img.length ? img.attr('src') : PLACEHOLDER_JPEG_DATA_URI);
+        // El <img> de cada tarjeta ya existe SIEMPRE en el DOM desde que carga la página
+        // (ver internohuellas.php, cuadrícula de resultados, pedido del usuario 2026-09-29) --
+        // antes solo existía una vez capturado, así que "el elemento existe" ya no sirve para
+        // saber si hay una imagen real. Se revisa que además tenga "src" puesto.
+        var hasImage = img.length > 0 && !!img.attr('src');
+        if (isChecked && !hasImage) faltaAlguna = true;
+        arreglo.push(hasImage ? img.attr('src') : PLACEHOLDER_JPEG_DATA_URI);
     });
     return { arreglo_capturas: arreglo_capturas, arreglo: arreglo, faltaAlguna: faltaAlguna };
 }
