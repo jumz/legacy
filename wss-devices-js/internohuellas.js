@@ -12,10 +12,34 @@ var statusElement = document.getElementById("status");
 var promptElement = document.getElementById("prompt");
 var markMissingElement = document.getElementById("markMissing");
 var resetElement = document.getElementById("reset");
-var previewScoreElement = document.getElementById("previewScore");
+var previewScoreElement = document.getElementById("previewScoreBar");
 var missingFingers = [];
 var captureComponent;
 var setComponent;
+
+// Escala NIST/NFIQ que regresa getNfiqScore: 1=mejor ... 5=peor. Pedido explícito del usuario,
+// 2026-09-29: mostrarla como barra de progreso (1->100%, 2->80%, ... 5->20%) y NO aceptar nada
+// peor a calidad 2 -- si algún dedo del grupo sale en 3/4/5, se rechaza el grupo COMPLETO y se
+// vuelve a pedir automáticamente (no hay forma de recapturar un solo dedo de un slap de 4: el
+// RealScan G10 los lee todos juntos en una sola operación de hardware).
+var QUALITY_TO_PERCENT = { 1: 100, 2: 80, 3: 60, 4: 40, 5: 20 };
+var QUALITY_TO_COLOR = { 1: "#2e7d32", 2: "#8bc34a", 3: "#ff9800", 4: "#f4511e", 5: "#c62828" };
+var MAX_ACCEPTABLE_QUALITY = 2;
+
+function setQualityBar(el, score) {
+    if (!el) return;
+    if (score === undefined || score === null || QUALITY_TO_PERCENT[score] === undefined) {
+        el.style.width = "0%";
+        el.style.backgroundColor = "#e0e0e0";
+        return;
+    }
+    el.style.width = QUALITY_TO_PERCENT[score] + "%";
+    el.style.backgroundColor = QUALITY_TO_COLOR[score];
+}
+
+function isQualityRejected(score) {
+    return score !== undefined && score !== null && score > MAX_ACCEPTABLE_QUALITY;
+}
 
 // Antes, si el WebSocket nunca lograba abrir (p.ej. BiometricBridge.App no está corriendo en
 // esta computadora), no había onerror/onclose -- el estado se quedaba pegado para siempre en
@@ -119,8 +143,8 @@ function appendImage(imageData, fingerCode, score)
     img.style.display = "";
     var placeholder = img.parentElement ? img.parentElement.querySelector('.huella-card-placeholder') : null;
     if (placeholder) placeholder.style.display = "none";
-    var scoreEl = img.parentElement ? img.parentElement.querySelector('.huella-card-score') : null;
-    if (scoreEl) scoreEl.textContent = (score !== undefined && score !== null) ? ('Calidad: ' + score) : '';
+    var qualityFill = img.parentElement ? img.parentElement.querySelector('.huella-card-quality-fill') : null;
+    setQualityBar(qualityFill, score);
 }
 
 // Vacía (vuelve a mostrar el placeholder gris) las tarjetas de un grupo -- pedido explícito
@@ -134,8 +158,8 @@ function clearGroupImages(groupIndex) {
         img.style.display = "none";
         var placeholder = img.parentElement ? img.parentElement.querySelector('.huella-card-placeholder') : null;
         if (placeholder) placeholder.style.display = "";
-        var scoreEl = img.parentElement ? img.parentElement.querySelector('.huella-card-score') : null;
-        if (scoreEl) scoreEl.textContent = '';
+        var qualityFill = img.parentElement ? img.parentElement.querySelector('.huella-card-quality-fill') : null;
+        setQualityBar(qualityFill, undefined);
     });
 }
 
@@ -177,63 +201,87 @@ function onCapturedImage(base64Image) {
                 appendImage(imageData);
             });
         }
-        if (impression === FingerprintCaptureApi.Impression.PLAIN_LEFT_FOUR_FINGERS)
+
+        var groupPromise;
+        if (impression === FingerprintCaptureApi.Impression.PLAIN_LEFT_FOUR_FINGERS ||
+            impression === FingerprintCaptureApi.Impression.PLAIN_RIGHT_FOUR_FINGERS ||
+            impression === FingerprintCaptureApi.Impression.PLAIN_DUAL_THUMBS)
         {
-            getSegments();
+            groupPromise = getSegments();
         }
-        else if (impression === FingerprintCaptureApi.Impression.PLAIN_RIGHT_FOUR_FINGERS)
+        else
         {
-            getSegments();
-        }
-        else if (impression === FingerprintCaptureApi.Impression.PLAIN_DUAL_THUMBS)
-        {
-            getSegments();
+            groupPromise = Promise.resolve(true);
         }
 
-        // Si esta captura fue una recaptura puntual de un solo grupo (botón "Recapturar" de
-        // internohuellas.php), NO hay que seguir la secuencia normal hacia el SIGUIENTE grupo
-        // -- eso volvería a pedir grupos que ya estaban bien, solo porque se recapturó otro.
-        // Se marca "terminado" y se limpia la bandera, sin encadenar. Pedido explícito del
-        // usuario, 2026-09-29.
-        if (recaptureTargetIndex !== null) {
-            recaptureTargetIndex = null;
-            impressionsIndex = impressionsToCapture.length;
-            promptElement.innerText = "";
-            statusElement.innerText = "Captura finalizada.";
-            return;
-        }
+        // getSegments() ya decidió si el grupo se acepta (todos los dedos con calidad 1-2) o
+        // se rechaza (alguno en 3/4/5) -- en ese segundo caso ya programó su propio reintento
+        // automático (setTimeout(startPreview, ...) con el MISMO impressionsIndex) y devuelve
+        // false, así que aquí no hay que avanzar ni tocar nada más. Pedido explícito del
+        // usuario, 2026-09-29: "no permitamos nada menos calidad de 2".
+        groupPromise.then(function (accepted) {
+            if (!accepted) return;
 
-        impressionsIndex++;
-        startPreview();
+            // Si esta captura fue una recaptura puntual de un solo grupo (botón "Recapturar" de
+            // internohuellas.php), NO hay que seguir la secuencia normal hacia el SIGUIENTE
+            // grupo -- eso volvería a pedir grupos que ya estaban bien, solo porque se
+            // recapturó otro. Se marca "terminado" y se limpia la bandera, sin encadenar.
+            // Pedido explícito del usuario, 2026-09-29.
+            if (recaptureTargetIndex !== null) {
+                recaptureTargetIndex = null;
+                impressionsIndex = impressionsToCapture.length;
+                promptElement.innerText = "";
+                statusElement.innerText = "Captura finalizada.";
+                return;
+            }
+
+            impressionsIndex++;
+            startPreview();
+        });
     });
 }
 
+// Pide la imagen segmentada + score NIST de cada dedo del grupo actual, espera a que TODOS
+// terminen (Promise.all) y decide si el grupo se acepta o se rechaza -- pedido explícito del
+// usuario, 2026-09-29: "no permitamos nada menos calidad de 2". Si se acepta, agrega las
+// imágenes al div de resultados y resuelve `true`. Si se rechaza (algún dedo en calidad 3/4/5),
+// NO se agrega nada a resultados (evita mostrar una huella mala que de todos modos se va a
+// recapturar), se reintenta el grupo COMPLETO automáticamente (mismo impressionsIndex, no hay
+// forma de recapturar un solo dedo suelto de un slap de 4 ya escaneado) y resuelve `false`.
 function getSegments (){
     var positions = getPositions();
-    for (i = 0; i < positions.length; i++) {
-        // IIFE para capturar fingerCode por iteración -- el for de arriba usa "var i"/"var
-        // impression" (sin "let"), así que sin esto todas las promesas resueltas más tarde
-        // verían el ÚLTIMO valor de la iteración, no el que les tocaba (mismo problema clásico
-        // de var+async en un loop). Necesario para el data-finger-code de appendImage.
-        (function (fingerCode) {
-            if (missingFingers.indexOf(fingerCode) === -1)
-            {
-                // Translate single finger code to finger in slap code
-                var impression = ImpressionInfo.SingleFingerToFingerInSlap[fingerCode];
-                setComponent.getSegmentedImage(impression,
-                    FingerprintSetApi.ImageFormat.PNG).then( function(imageData){
-                    // Calidad NIST del dedo -- pedido explícito del usuario, 2026-09-29. Si
-                    // falla, se muestra la imagen igual, solo sin calificación (best effort,
-                    // no bloquear el resultado por esto).
-                    setComponent.getNfiqScore(impression).then(function (score) {
-                        appendImage(imageData, fingerCode, score);
-                    }).catch(function () {
-                        appendImage(imageData, fingerCode);
-                    });
-                });
-            }
-        })(positions[i]);
-    }
+    var promises = positions.map(function (fingerCode) {
+        if (missingFingers.indexOf(fingerCode) !== -1) return Promise.resolve(null);
+        // Translate single finger code to finger in slap code
+        var impression = ImpressionInfo.SingleFingerToFingerInSlap[fingerCode];
+        return setComponent.getSegmentedImage(impression, FingerprintSetApi.ImageFormat.PNG).then(function (imageData) {
+            // Calidad NIST del dedo -- pedido explícito del usuario, 2026-09-29. Si falla,
+            // se trata como "sin calificación" (no bloquea el resultado por esto).
+            return setComponent.getNfiqScore(impression).then(function (score) {
+                return { fingerCode: fingerCode, imageData: imageData, score: score };
+            }).catch(function () {
+                return { fingerCode: fingerCode, imageData: imageData, score: undefined };
+            });
+        });
+    });
+    return Promise.all(promises).then(function (results) {
+        var peorScore;
+        results.forEach(function (r) {
+            if (!r || r.score === undefined || r.score === null) return;
+            if (peorScore === undefined || r.score > peorScore) peorScore = r.score;
+        });
+        setQualityBar(previewScoreElement, peorScore);
+        var rechazado = results.some(function (r) { return r && isQualityRejected(r.score); });
+        if (rechazado) {
+            statusElement.innerText = "Calidad insuficiente en el grupo -- reintentando...";
+            setTimeout(startPreview, 2000);
+            return false;
+        }
+        results.forEach(function (r) {
+            if (r) appendImage(r.imageData, r.fingerCode, r.score);
+        });
+        return true;
+    });
 }
 
 function onPreviewQualityScore (impressionString, afiqScore) {
@@ -311,7 +359,7 @@ function isImpressionFullyOmitted(impression) {
 function startPreview() {
     qualityScores.clear();
     ocultarMensaje();
-    previewScoreElement.innerText ="";
+    setQualityBar(previewScoreElement, undefined);
     // Salta cualquier grupo completamente omitido ANTES de armarlo -- ver
     // isImpressionFullyOmitted arriba.
     while (impressionsIndex < impressionsToCapture.length && isImpressionFullyOmitted(impressionsToCapture[impressionsIndex])) {
@@ -375,6 +423,7 @@ function onReset() {
     clearGroupImages(0);
     clearGroupImages(1);
     clearGroupImages(2);
+    setQualityBar(previewScoreElement, undefined);
 }
 
 function loadConfig() {

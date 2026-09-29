@@ -19,10 +19,33 @@ var statusElement = document.getElementById("status");
 var promptElement = document.getElementById("prompt");
 var markMissingElement = document.getElementById("markMissing");
 var resetElement = document.getElementById("reset");
-var previewScoreElement = document.getElementById("previewScore");
+var previewScoreElement = document.getElementById("previewScoreBar");
 var missingFingers = [];
 var captureComponent;
 var setComponent;
+
+// Escala NIST/NFIQ que regresa getNfiqScore: 1=mejor ... 5=peor. Pedido explícito del usuario,
+// 2026-09-29: mostrarla como barra de progreso (1->100%, 2->80%, ... 5->20%) y NO aceptar nada
+// peor a calidad 2 -- si un dedo sale en 3/4/5, se rechaza y se vuelve a pedir el MISMO dedo
+// automáticamente.
+var QUALITY_TO_PERCENT = { 1: 100, 2: 80, 3: 60, 4: 40, 5: 20 };
+var QUALITY_TO_COLOR = { 1: "#2e7d32", 2: "#8bc34a", 3: "#ff9800", 4: "#f4511e", 5: "#c62828" };
+var MAX_ACCEPTABLE_QUALITY = 2;
+
+function setQualityBar(el, score) {
+    if (!el) return;
+    if (score === undefined || score === null || QUALITY_TO_PERCENT[score] === undefined) {
+        el.style.width = "0%";
+        el.style.backgroundColor = "#e0e0e0";
+        return;
+    }
+    el.style.width = QUALITY_TO_PERCENT[score] + "%";
+    el.style.backgroundColor = QUALITY_TO_COLOR[score];
+}
+
+function isQualityRejected(score) {
+    return score !== undefined && score !== null && score > MAX_ACCEPTABLE_QUALITY;
+}
 
 // Avanza impressionsIndex saltando cualquier dedo ya marcado como "missing" (desmarcado por el
 // operador, ver el click handler de ".huellas" más abajo). Antes, desmarcar una casilla solo
@@ -135,8 +158,8 @@ function appendImage(imageData, fingerCode, score)
     img.style.display = "";
     var placeholder = img.parentElement ? img.parentElement.querySelector('.huella-card-placeholder') : null;
     if (placeholder) placeholder.style.display = "none";
-    var scoreEl = img.parentElement ? img.parentElement.querySelector('.huella-card-score') : null;
-    if (scoreEl) scoreEl.textContent = (score !== undefined && score !== null) ? ('Calidad: ' + score) : '';
+    var qualityFill = img.parentElement ? img.parentElement.querySelector('.huella-card-quality-fill') : null;
+    setQualityBar(qualityFill, score);
 }
 
 // Vacía (vuelve a mostrar el placeholder gris) la tarjeta de UN dedo -- aquí cada botón
@@ -148,8 +171,8 @@ function clearFingerImage(fingerCode) {
     img.style.display = "none";
     var placeholder = img.parentElement ? img.parentElement.querySelector('.huella-card-placeholder') : null;
     if (placeholder) placeholder.style.display = "";
-    var scoreEl = img.parentElement ? img.parentElement.querySelector('.huella-card-score') : null;
-    if (scoreEl) scoreEl.textContent = '';
+    var qualityFill = img.parentElement ? img.parentElement.querySelector('.huella-card-quality-fill') : null;
+    setQualityBar(qualityFill, undefined);
 }
 
 // FingerprintCaptureApi.Finger (código de la tarjeta) -> FingerprintCaptureApi.Impression
@@ -185,111 +208,73 @@ function recapturarDedo(fingerCode) {
     });
 }
 
+// Impression (FingerprintCaptureApi, ROLLED_*) -> {setImpression, fingerCode} -- reemplaza el
+// if/else de 10 ramas que había antes. Necesario para poder ESPERAR a que getNfiqScore()
+// resuelva ANTES de decidir si se avanza al siguiente dedo o se rechaza y reintenta.
+var IMPRESSION_TO_BRANCH = {};
+[
+    [FingerprintCaptureApi.Impression.ROLLED_LEFT_LITTLE_FINGER, FingerprintSetApi.Impression.ROLLED_LEFT_LITTLE_FINGER, FingerprintCaptureApi.Finger.LEFT_LITTLE_FINGER],
+    [FingerprintCaptureApi.Impression.ROLLED_LEFT_RING_FINGER, FingerprintSetApi.Impression.ROLLED_LEFT_RING_FINGER, FingerprintCaptureApi.Finger.LEFT_RING_FINGER],
+    [FingerprintCaptureApi.Impression.ROLLED_LEFT_MIDDLE_FINGER, FingerprintSetApi.Impression.ROLLED_LEFT_MIDDLE_FINGER, FingerprintCaptureApi.Finger.LEFT_MIDDLE_FINGER],
+    [FingerprintCaptureApi.Impression.ROLLED_LEFT_INDEX_FINGER, FingerprintSetApi.Impression.ROLLED_LEFT_INDEX_FINGER, FingerprintCaptureApi.Finger.LEFT_INDEX_FINGER],
+    [FingerprintCaptureApi.Impression.ROLLED_LEFT_THUMB, FingerprintSetApi.Impression.ROLLED_LEFT_THUMB, FingerprintCaptureApi.Finger.LEFT_THUMB],
+    [FingerprintCaptureApi.Impression.ROLLED_RIGHT_LITTLE_FINGER, FingerprintSetApi.Impression.ROLLED_RIGHT_LITTLE_FINGER, FingerprintCaptureApi.Finger.RIGHT_LITTLE_FINGER],
+    [FingerprintCaptureApi.Impression.ROLLED_RIGHT_RING_FINGER, FingerprintSetApi.Impression.ROLLED_RIGHT_RING_FINGER, FingerprintCaptureApi.Finger.RIGHT_RING_FINGER],
+    [FingerprintCaptureApi.Impression.ROLLED_RIGHT_MIDDLE_FINGER, FingerprintSetApi.Impression.ROLLED_RIGHT_MIDDLE_FINGER, FingerprintCaptureApi.Finger.RIGHT_MIDDLE_FINGER],
+    [FingerprintCaptureApi.Impression.ROLLED_RIGHT_INDEX_FINGER, FingerprintSetApi.Impression.ROLLED_RIGHT_INDEX_FINGER, FingerprintCaptureApi.Finger.RIGHT_INDEX_FINGER],
+    [FingerprintCaptureApi.Impression.ROLLED_RIGHT_THUMB, FingerprintSetApi.Impression.ROLLED_RIGHT_THUMB, FingerprintCaptureApi.Finger.RIGHT_THUMB]
+].forEach(function (entry) {
+    IMPRESSION_TO_BRANCH[entry[0]] = { setImpression: entry[1], fingerCode: entry[2] };
+});
+
 // Handler for receiving the final captured image
 function onCapturedImage(base64Image) {
     markMissingElement.disabled = true;
     statusElement.innerText = "Recibiendo imagen.";
-    imgElement.src = "data:image/jpg;base64," + base64Image;    
+    imgElement.src = "data:image/jpg;base64," + base64Image;
     var impression = impressionsToCapture[impressionsIndex];
     collectedImages[impression] = base64Image;
-    setComponent.setFingerprintCaptureImage(impression, captureComponent).then(function () {        
-        if (impression === FingerprintCaptureApi.Impression.ROLLED_LEFT_LITTLE_FINGER)
-        {
-            setComponent.getSegmentedImage(FingerprintSetApi.Impression.ROLLED_LEFT_LITTLE_FINGER,
-                FingerprintSetApi.ImageFormat.PNG).then( function(imageData){
-                setComponent.getNfiqScore(FingerprintSetApi.Impression.ROLLED_LEFT_LITTLE_FINGER).then(function(score){
-                    appendImage(imageData, FingerprintCaptureApi.Finger.LEFT_LITTLE_FINGER, score);
-                }).catch(function(){ appendImage(imageData, FingerprintCaptureApi.Finger.LEFT_LITTLE_FINGER); });
+    setComponent.setFingerprintCaptureImage(impression, captureComponent).then(function () {
+        var branch = IMPRESSION_TO_BRANCH[impression];
+        if (!branch) return;
+        setComponent.getSegmentedImage(branch.setImpression, FingerprintSetApi.ImageFormat.PNG).then(function (imageData) {
+            setComponent.getNfiqScore(branch.setImpression).then(function (score) {
+                finishCapturedFinger(imageData, branch.fingerCode, score);
+            }).catch(function () {
+                finishCapturedFinger(imageData, branch.fingerCode, undefined);
             });
-        }else if(impression === FingerprintCaptureApi.Impression.ROLLED_LEFT_RING_FINGER)
-        {
-            setComponent.getSegmentedImage(FingerprintSetApi.Impression.ROLLED_LEFT_RING_FINGER,
-                FingerprintSetApi.ImageFormat.PNG).then( function(imageData){
-                setComponent.getNfiqScore(FingerprintSetApi.Impression.ROLLED_LEFT_RING_FINGER).then(function(score){
-                    appendImage(imageData, FingerprintCaptureApi.Finger.LEFT_RING_FINGER, score);
-                }).catch(function(){ appendImage(imageData, FingerprintCaptureApi.Finger.LEFT_RING_FINGER); });
-            });
-        }else if(impression === FingerprintCaptureApi.Impression.ROLLED_LEFT_MIDDLE_FINGER)
-        {
-            setComponent.getSegmentedImage(FingerprintSetApi.Impression.ROLLED_LEFT_MIDDLE_FINGER,
-                FingerprintSetApi.ImageFormat.PNG).then( function(imageData){
-                setComponent.getNfiqScore(FingerprintSetApi.Impression.ROLLED_LEFT_MIDDLE_FINGER).then(function(score){
-                    appendImage(imageData, FingerprintCaptureApi.Finger.LEFT_MIDDLE_FINGER, score);
-                }).catch(function(){ appendImage(imageData, FingerprintCaptureApi.Finger.LEFT_MIDDLE_FINGER); });
-            });
-        }else if(impression === FingerprintCaptureApi.Impression.ROLLED_LEFT_INDEX_FINGER)
-        {
-            setComponent.getSegmentedImage(FingerprintSetApi.Impression.ROLLED_LEFT_INDEX_FINGER,
-                FingerprintSetApi.ImageFormat.PNG).then( function(imageData){
-                setComponent.getNfiqScore(FingerprintSetApi.Impression.ROLLED_LEFT_INDEX_FINGER).then(function(score){
-                    appendImage(imageData, FingerprintCaptureApi.Finger.LEFT_INDEX_FINGER, score);
-                }).catch(function(){ appendImage(imageData, FingerprintCaptureApi.Finger.LEFT_INDEX_FINGER); });
-            });
-        }else if(impression === FingerprintCaptureApi.Impression.ROLLED_LEFT_THUMB)
-        {
-            setComponent.getSegmentedImage(FingerprintSetApi.Impression.ROLLED_LEFT_THUMB,
-                FingerprintSetApi.ImageFormat.PNG).then( function(imageData){
-                setComponent.getNfiqScore(FingerprintSetApi.Impression.ROLLED_LEFT_THUMB).then(function(score){
-                    appendImage(imageData, FingerprintCaptureApi.Finger.LEFT_THUMB, score);
-                }).catch(function(){ appendImage(imageData, FingerprintCaptureApi.Finger.LEFT_THUMB); });
-            });
-        }else if (impression === FingerprintCaptureApi.Impression.ROLLED_RIGHT_LITTLE_FINGER)
-        {
-            setComponent.getSegmentedImage(FingerprintSetApi.Impression.ROLLED_RIGHT_LITTLE_FINGER,
-                FingerprintSetApi.ImageFormat.PNG).then( function(imageData){
-                setComponent.getNfiqScore(FingerprintSetApi.Impression.ROLLED_RIGHT_LITTLE_FINGER).then(function(score){
-                    appendImage(imageData, FingerprintCaptureApi.Finger.RIGHT_LITTLE_FINGER, score);
-                }).catch(function(){ appendImage(imageData, FingerprintCaptureApi.Finger.RIGHT_LITTLE_FINGER); });
-            });
-        }else if(impression === FingerprintCaptureApi.Impression.ROLLED_RIGHT_RING_FINGER)
-        {
-            setComponent.getSegmentedImage(FingerprintSetApi.Impression.ROLLED_RIGHT_RING_FINGER,
-                FingerprintSetApi.ImageFormat.PNG).then( function(imageData){
-                setComponent.getNfiqScore(FingerprintSetApi.Impression.ROLLED_RIGHT_RING_FINGER).then(function(score){
-                    appendImage(imageData, FingerprintCaptureApi.Finger.RIGHT_RING_FINGER, score);
-                }).catch(function(){ appendImage(imageData, FingerprintCaptureApi.Finger.RIGHT_RING_FINGER); });
-            });
-        }else if(impression === FingerprintCaptureApi.Impression.ROLLED_RIGHT_MIDDLE_FINGER)
-        {
-            setComponent.getSegmentedImage(FingerprintSetApi.Impression.ROLLED_RIGHT_MIDDLE_FINGER,
-                FingerprintSetApi.ImageFormat.PNG).then( function(imageData){
-                setComponent.getNfiqScore(FingerprintSetApi.Impression.ROLLED_RIGHT_MIDDLE_FINGER).then(function(score){
-                    appendImage(imageData, FingerprintCaptureApi.Finger.RIGHT_MIDDLE_FINGER, score);
-                }).catch(function(){ appendImage(imageData, FingerprintCaptureApi.Finger.RIGHT_MIDDLE_FINGER); });
-            });
-        }else if(impression === FingerprintCaptureApi.Impression.ROLLED_RIGHT_INDEX_FINGER)
-        {
-            setComponent.getSegmentedImage(FingerprintSetApi.Impression.ROLLED_RIGHT_INDEX_FINGER,
-                FingerprintSetApi.ImageFormat.PNG).then( function(imageData){
-                setComponent.getNfiqScore(FingerprintSetApi.Impression.ROLLED_RIGHT_INDEX_FINGER).then(function(score){
-                    appendImage(imageData, FingerprintCaptureApi.Finger.RIGHT_INDEX_FINGER, score);
-                }).catch(function(){ appendImage(imageData, FingerprintCaptureApi.Finger.RIGHT_INDEX_FINGER); });
-            });
-        }else if(impression === FingerprintCaptureApi.Impression.ROLLED_RIGHT_THUMB)
-        {
-            setComponent.getSegmentedImage(FingerprintSetApi.Impression.ROLLED_RIGHT_THUMB,
-                FingerprintSetApi.ImageFormat.PNG).then( function(imageData){
-                setComponent.getNfiqScore(FingerprintSetApi.Impression.ROLLED_RIGHT_THUMB).then(function(score){
-                    appendImage(imageData, FingerprintCaptureApi.Finger.RIGHT_THUMB, score);
-                }).catch(function(){ appendImage(imageData, FingerprintCaptureApi.Finger.RIGHT_THUMB); });
-            });
-        }
-
-        // Si esta captura fue una recaptura puntual de un solo dedo (botón "Recapturar" de
-        // internohuellasroladas.php), NO hay que seguir la secuencia normal hacia el
-        // SIGUIENTE dedo. Pedido explícito del usuario, 2026-09-29.
-        if (recaptureTargetIndex !== null) {
-            recaptureTargetIndex = null;
-            impressionsIndex = impressionsToCapture.length;
-            promptElement.innerText = "";
-            statusElement.innerText = "Captura finalizada.";
-            return;
-        }
-
-        impressionsIndex++;
-        advanceToNextCapturable();
-        startPreview();
+        });
     });
+}
+
+// Decide si el dedo recién capturado se acepta o se rechaza por calidad -- pedido explícito
+// del usuario, 2026-09-29: "no permitamos nada menos calidad de 2". Si se rechaza (calidad
+// 3/4/5), NO se agrega a resultados, se avisa y se vuelve a pedir el MISMO dedo automáticamente
+// (mismo impressionsIndex). Si se acepta, sigue el flujo normal (avanzar/finalizar recaptura)
+// que antes corría siempre de inmediato, sin esperar la calidad.
+function finishCapturedFinger(imageData, fingerCode, score) {
+    setQualityBar(previewScoreElement, score);
+    if (isQualityRejected(score)) {
+        statusElement.innerText = "Calidad insuficiente (" + score + ") -- reintentando...";
+        setTimeout(startPreview, 2000);
+        return;
+    }
+    appendImage(imageData, fingerCode, score);
+
+    // Si esta captura fue una recaptura puntual de un solo dedo (botón "Recapturar" de
+    // internohuellasroladas.php), NO hay que seguir la secuencia normal hacia el SIGUIENTE
+    // dedo. Pedido explícito del usuario, 2026-09-29.
+    if (recaptureTargetIndex !== null) {
+        recaptureTargetIndex = null;
+        impressionsIndex = impressionsToCapture.length;
+        promptElement.innerText = "";
+        statusElement.innerText = "Captura finalizada.";
+        return;
+    }
+
+    impressionsIndex++;
+    advanceToNextCapturable();
+    startPreview();
 }
 
 function getSegments (){
@@ -406,7 +391,7 @@ function registerCallbacks() {
 function startPreview() {
     qualityScores.clear();
     ocultarMensaje();
-    previewScoreElement.innerText ="";
+    setQualityBar(previewScoreElement, undefined);
     if (impressionsIndex < impressionsToCapture.length) {
         var impression = impressionsToCapture[impressionsIndex];
         promptElement.innerText = FingerprintCaptureApi.Impression[impression];
