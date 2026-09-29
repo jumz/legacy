@@ -262,15 +262,21 @@ include(FOLDER_HTML . 'include/header.php');
           </div>
         </div>
         <style>
+          /* Pedido explícito del usuario, 2026-09-29: las imágenes deben ocupar todo el
+             ancho de su fila -- antes cada tarjeta tenía un ancho fijo (92px), dejando
+             espacio vacío a la derecha en filas más anchas que el contenido. Ahora cada
+             tarjeta crece a partes iguales (flex:1) hasta llenar la fila completa; el
+             ancho de cada imagen depende de cuántas tarjetas tenga esa fila (4 en las
+             manos, 2 en pulgares -- por eso los pulgares se ven más anchos, no es un bug). */
           #resultados.resultados-grid { display: flex; flex-direction: column; gap: 14px; margin-top: 10px; }
-          #resultados .resultados-fila { display: flex; flex-wrap: wrap; gap: 12px; }
-          #resultados .huella-card { width: 92px; text-align: center; font-size: 11px; }
+          #resultados .resultados-fila { display: flex; gap: 12px; }
+          #resultados .huella-card { flex: 1 1 0; min-width: 0; text-align: center; font-size: 11px; }
           #resultados .huella-card img,
-          #resultados .huella-card-placeholder { width: 72px; height: 92px; border-radius: 4px; margin: 0 auto; }
+          #resultados .huella-card-placeholder { display: block; width: 100%; height: auto; aspect-ratio: 3 / 4; border-radius: 4px; }
           #resultados .huella-card img { object-fit: cover; border: 1px solid #ccc; }
           #resultados .huella-card-placeholder { background: #f0f0f0; border: 1px dashed #ccc; }
           #resultados .huella-card-label { margin-top: 4px; color: #555; line-height: 1.2; }
-          #resultados .btn-recapturar { margin-top: 4px; font-size: 10px; padding: 2px 6px; }
+          #resultados .btn-recapturar { margin-top: 4px; font-size: 10px; padding: 2px 6px; width: 100%; }
         </style>
         <script>
           // Delega el clic de "Recapturar" a recapturarGrupo(groupIndex), función global
