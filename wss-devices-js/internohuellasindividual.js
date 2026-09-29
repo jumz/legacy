@@ -47,6 +47,20 @@ function isQualityRejected(score) {
     return score !== undefined && score !== null && score > MAX_ACCEPTABLE_QUALITY;
 }
 
+// Palabra de calidad que acompaña a la barra de "Calidad de la lectura" -- pedido explícito
+// del usuario, 2026-09-29: "hay que agregar la palabra... 1 = excelente, 2 = muy buena,
+// 3 = buena, 4 = regular, 5 = mala/pobre". Solo se muestra junto a la barra de vista previa,
+// no en las tarjetas de resultados.
+var QUALITY_TO_WORD = { 1: "Excelente", 2: "Muy buena", 3: "Buena", 4: "Regular", 5: "Mala/pobre" };
+var previewScoreWordElement = document.getElementById("previewScoreWord");
+
+function setPreviewQuality(score) {
+    setQualityBar(previewScoreElement, score);
+    if (previewScoreWordElement) {
+        previewScoreWordElement.textContent = (score !== undefined && score !== null && QUALITY_TO_WORD[score] !== undefined) ? QUALITY_TO_WORD[score] : "";
+    }
+}
+
 // Avanza impressionsIndex saltando cualquier dedo ya marcado como "missing" (desmarcado por el
 // operador, ver el click handler de ".huellas" más abajo). Antes, desmarcar una casilla solo
 // hacía impressionsIndex++ una vez, sin importar CUÁL casilla era -- si se desmarcaban varias,
@@ -266,7 +280,7 @@ function onCapturedImage(base64Image) {
 // (mismo impressionsIndex). Si se acepta, sigue el flujo normal (avanzar/finalizar recaptura)
 // que antes corría siempre de inmediato, sin esperar la calidad.
 function finishCapturedFinger(imageData, fingerCode, score) {
-    setQualityBar(previewScoreElement, score);
+    setPreviewQuality(score);
     if (isQualityRejected(score)) {
         statusElement.innerText = "Calidad insuficiente (" + score + ") -- reintentando...";
         setTimeout(startPreview, 2000);
@@ -412,7 +426,7 @@ function registerCallbacks() {
 function startPreview() {
     qualityScores.clear();
     ocultarMensaje();
-    setQualityBar(previewScoreElement, undefined);
+    setPreviewQuality(undefined);
     if (impressionsIndex < impressionsToCapture.length) {
         var impression = impressionsToCapture[impressionsIndex];
         promptElement.innerText = FingerprintCaptureApi.Impression[impression];

@@ -34,7 +34,7 @@ include(FOLDER_HTML . 'include/header.php');
             <p>Capturando: <span id="prompt"></span></p>
             <p style="display: none;"><button id="markMissing">Mark Missing</button> When collecting slaps, marks index as missing. When collecting dual thumbs, marks left thumb as missing.</p>
             <p>Estado: <span id="autocaptureStatus"></span></p>
-            <div class="quality-bar-wrap"><span class="quality-bar-label">Calidad de la lectura</span><div class="quality-bar-track"><div class="quality-bar-fill" id="previewScoreBar"></div></div></div>
+            <div class="quality-bar-wrap"><span class="quality-bar-label">Calidad de la lectura</span><div class="quality-bar-track"><div class="quality-bar-fill" id="previewScoreBar"></div></div><span class="quality-bar-word" id="previewScoreWord"></span></div>
 
             <button class="btn btn-info" id="reset">Reiniciar captura</button>
             <a class="btn btn-success" href="internohuellasindividual.php?id=<?php echo $_GET['id']; ?>">Capturar individualmente</a>
@@ -198,28 +198,28 @@ include(FOLDER_HTML . 'include/header.php');
             <div class="huella-card" data-finger-code="10">
               <div class="huella-card-placeholder"></div>
               <img data-finger-code="10" style="display:none;">
-              <div class="huella-card-label">Meñique<br>Mano Izquierda</div>
+              <div class="huella-card-label">10 Meñique<br>Mano Izquierda</div>
               <div class="huella-card-quality"><div class="huella-card-quality-track"><div class="huella-card-quality-fill" data-quality-fill></div></div></div>
               <button type="button" class="btn btn-sm btn-outline-secondary btn-recapturar" data-group="0">Recapturar</button>
             </div>
             <div class="huella-card" data-finger-code="9">
               <div class="huella-card-placeholder"></div>
               <img data-finger-code="9" style="display:none;">
-              <div class="huella-card-label">Anular<br>Mano Izquierda</div>
+              <div class="huella-card-label">9 Anular<br>Mano Izquierda</div>
               <div class="huella-card-quality"><div class="huella-card-quality-track"><div class="huella-card-quality-fill" data-quality-fill></div></div></div>
               <button type="button" class="btn btn-sm btn-outline-secondary btn-recapturar" data-group="0">Recapturar</button>
             </div>
             <div class="huella-card" data-finger-code="8">
               <div class="huella-card-placeholder"></div>
               <img data-finger-code="8" style="display:none;">
-              <div class="huella-card-label">Medio<br>Mano Izquierda</div>
+              <div class="huella-card-label">8 Medio<br>Mano Izquierda</div>
               <div class="huella-card-quality"><div class="huella-card-quality-track"><div class="huella-card-quality-fill" data-quality-fill></div></div></div>
               <button type="button" class="btn btn-sm btn-outline-secondary btn-recapturar" data-group="0">Recapturar</button>
             </div>
             <div class="huella-card" data-finger-code="7">
               <div class="huella-card-placeholder"></div>
               <img data-finger-code="7" style="display:none;">
-              <div class="huella-card-label">Índice<br>Mano Izquierda</div>
+              <div class="huella-card-label">7 Índice<br>Mano Izquierda</div>
               <div class="huella-card-quality"><div class="huella-card-quality-track"><div class="huella-card-quality-fill" data-quality-fill></div></div></div>
               <button type="button" class="btn btn-sm btn-outline-secondary btn-recapturar" data-group="0">Recapturar</button>
             </div>
@@ -228,28 +228,28 @@ include(FOLDER_HTML . 'include/header.php');
             <div class="huella-card" data-finger-code="5">
               <div class="huella-card-placeholder"></div>
               <img data-finger-code="5" style="display:none;">
-              <div class="huella-card-label">Meñique<br>Mano Derecha</div>
+              <div class="huella-card-label">5 Meñique<br>Mano Derecha</div>
               <div class="huella-card-quality"><div class="huella-card-quality-track"><div class="huella-card-quality-fill" data-quality-fill></div></div></div>
               <button type="button" class="btn btn-sm btn-outline-secondary btn-recapturar" data-group="1">Recapturar</button>
             </div>
             <div class="huella-card" data-finger-code="4">
               <div class="huella-card-placeholder"></div>
               <img data-finger-code="4" style="display:none;">
-              <div class="huella-card-label">Anular<br>Mano Derecha</div>
+              <div class="huella-card-label">4 Anular<br>Mano Derecha</div>
               <div class="huella-card-quality"><div class="huella-card-quality-track"><div class="huella-card-quality-fill" data-quality-fill></div></div></div>
               <button type="button" class="btn btn-sm btn-outline-secondary btn-recapturar" data-group="1">Recapturar</button>
             </div>
             <div class="huella-card" data-finger-code="3">
               <div class="huella-card-placeholder"></div>
               <img data-finger-code="3" style="display:none;">
-              <div class="huella-card-label">Medio<br>Mano Derecha</div>
+              <div class="huella-card-label">3 Medio<br>Mano Derecha</div>
               <div class="huella-card-quality"><div class="huella-card-quality-track"><div class="huella-card-quality-fill" data-quality-fill></div></div></div>
               <button type="button" class="btn btn-sm btn-outline-secondary btn-recapturar" data-group="1">Recapturar</button>
             </div>
             <div class="huella-card" data-finger-code="2">
               <div class="huella-card-placeholder"></div>
               <img data-finger-code="2" style="display:none;">
-              <div class="huella-card-label">Índice<br>Mano Derecha</div>
+              <div class="huella-card-label">2 Índice<br>Mano Derecha</div>
               <div class="huella-card-quality"><div class="huella-card-quality-track"><div class="huella-card-quality-fill" data-quality-fill></div></div></div>
               <button type="button" class="btn btn-sm btn-outline-secondary btn-recapturar" data-group="1">Recapturar</button>
             </div>
@@ -258,14 +258,14 @@ include(FOLDER_HTML . 'include/header.php');
             <div class="huella-card" data-finger-code="6">
               <div class="huella-card-placeholder"></div>
               <img data-finger-code="6" style="display:none;">
-              <div class="huella-card-label">Pulgar<br>Izquierdo</div>
+              <div class="huella-card-label">6 Pulgar<br>Izquierdo</div>
               <div class="huella-card-quality"><div class="huella-card-quality-track"><div class="huella-card-quality-fill" data-quality-fill></div></div></div>
               <button type="button" class="btn btn-sm btn-outline-secondary btn-recapturar" data-group="2">Recapturar</button>
             </div>
             <div class="huella-card" data-finger-code="1">
               <div class="huella-card-placeholder"></div>
               <img data-finger-code="1" style="display:none;">
-              <div class="huella-card-label">Pulgar<br>Derecho</div>
+              <div class="huella-card-label">1 Pulgar<br>Derecho</div>
               <div class="huella-card-quality"><div class="huella-card-quality-track"><div class="huella-card-quality-fill" data-quality-fill></div></div></div>
               <button type="button" class="btn btn-sm btn-outline-secondary btn-recapturar" data-group="2">Recapturar</button>
             </div>
@@ -293,6 +293,7 @@ include(FOLDER_HTML . 'include/header.php');
           .quality-bar-label { font-size: 14px; color: #333; }
           .quality-bar-track { width: 160px; height: 14px; background: #e0e0e0; border-radius: 7px; overflow: hidden; }
           .quality-bar-fill { height: 100%; width: 0%; background: #e0e0e0; transition: width 0.25s ease, background-color 0.25s ease; }
+          .quality-bar-word { font-size: 14px; font-weight: 600; color: #333; min-width: 90px; }
           #resultados .btn-recapturar { margin-top: 6px; font-size: 13px; padding: 4px 8px; width: 100%; }
         </style>
         <script>

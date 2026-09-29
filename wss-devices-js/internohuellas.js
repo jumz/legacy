@@ -41,6 +41,20 @@ function isQualityRejected(score) {
     return score !== undefined && score !== null && score > MAX_ACCEPTABLE_QUALITY;
 }
 
+// Palabra de calidad que acompaña a la barra de "Calidad de la lectura" -- pedido explícito
+// del usuario, 2026-09-29: "hay que agregar la palabra... 1 = excelente, 2 = muy buena,
+// 3 = buena, 4 = regular, 5 = mala/pobre". Solo se muestra junto a la barra de vista previa,
+// no en las tarjetas de resultados.
+var QUALITY_TO_WORD = { 1: "Excelente", 2: "Muy buena", 3: "Buena", 4: "Regular", 5: "Mala/pobre" };
+var previewScoreWordElement = document.getElementById("previewScoreWord");
+
+function setPreviewQuality(score) {
+    setQualityBar(previewScoreElement, score);
+    if (previewScoreWordElement) {
+        previewScoreWordElement.textContent = (score !== undefined && score !== null && QUALITY_TO_WORD[score] !== undefined) ? QUALITY_TO_WORD[score] : "";
+    }
+}
+
 // Antes, si el WebSocket nunca lograba abrir (p.ej. BiometricBridge.App no está corriendo en
 // esta computadora), no había onerror/onclose -- el estado se quedaba pegado para siempre en
 // "Creando websocket..." sin ninguna pista de qué hacer. wsAbrioAlgunaVez distingue "nunca
@@ -277,7 +291,7 @@ function getSegments (){
             if (!r || r.score === undefined || r.score === null) return;
             if (peorScore === undefined || r.score > peorScore) peorScore = r.score;
         });
-        setQualityBar(previewScoreElement, peorScore);
+        setPreviewQuality(peorScore);
         var rechazado = results.some(function (r) { return r && isQualityRejected(r.score); });
         if (rechazado) {
             statusElement.innerText = "Calidad insuficiente en el grupo -- reintentando...";
@@ -366,7 +380,7 @@ function isImpressionFullyOmitted(impression) {
 function startPreview() {
     qualityScores.clear();
     ocultarMensaje();
-    setQualityBar(previewScoreElement, undefined);
+    setPreviewQuality(undefined);
     // Salta cualquier grupo completamente omitido ANTES de armarlo -- ver
     // isImpressionFullyOmitted arriba.
     while (impressionsIndex < impressionsToCapture.length && isImpressionFullyOmitted(impressionsToCapture[impressionsIndex])) {
@@ -430,7 +444,7 @@ function onReset() {
     clearGroupImages(0);
     clearGroupImages(1);
     clearGroupImages(2);
-    setQualityBar(previewScoreElement, undefined);
+    setPreviewQuality(undefined);
 }
 
 function loadConfig() {
