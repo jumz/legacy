@@ -235,8 +235,15 @@ function onCapturedImage(base64Image) {
                 return;
             }
 
+            // Pequeña pausa antes de pedir el siguiente grupo -- pedido explícito del usuario,
+            // 2026-09-29: "la calidad de la lectura cuando esta en el live no se alcanza, la
+            // barra parece permanecer en 0". Bug real: sin esta pausa, startPreview() (que
+            // resetea la barra a 0% antes de armar el siguiente grupo) corría en el MISMO ciclo
+            // síncrono en el que se acababa de pintar la barra con el score real -- el
+            // navegador nunca llegaba a pintar ese valor, solo el 0 final. Con la pausa, el
+            // score queda visible un momento antes de reiniciar la barra.
             impressionsIndex++;
-            startPreview();
+            setTimeout(startPreview, 900);
         });
     });
 }
