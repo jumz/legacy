@@ -270,13 +270,13 @@ include(FOLDER_HTML . 'include/header.php');
              manos, 2 en pulgares -- por eso los pulgares se ven más anchos, no es un bug). */
           #resultados.resultados-grid { display: flex; flex-direction: column; gap: 14px; margin-top: 10px; }
           #resultados .resultados-fila { display: flex; gap: 12px; }
-          #resultados .huella-card { flex: 1 1 0; min-width: 0; text-align: center; font-size: 11px; }
+          #resultados .huella-card { flex: 1 1 0; min-width: 0; text-align: center; font-size: 15px; }
           #resultados .huella-card img,
           #resultados .huella-card-placeholder { display: block; width: 100%; height: auto; aspect-ratio: 3 / 4; border-radius: 4px; }
           #resultados .huella-card img { object-fit: cover; border: 1px solid #ccc; }
           #resultados .huella-card-placeholder { background: #f0f0f0; border: 1px dashed #ccc; }
           #resultados .huella-card-label { margin-top: 4px; color: #555; line-height: 1.2; }
-          #resultados .btn-recapturar { margin-top: 4px; font-size: 10px; padding: 2px 6px; width: 100%; }
+          #resultados .btn-recapturar { margin-top: 6px; font-size: 13px; padding: 4px 8px; width: 100%; }
         </style>
         <script>
           // Delega el clic de "Recapturar" a recapturarGrupo(groupIndex), función global
