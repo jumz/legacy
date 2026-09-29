@@ -36,7 +36,7 @@ include(FOLDER_HTML . 'include/header.php');
             <p>Capturando: <span id="prompt"></span></p>
             <p style="display: none;"><button id="markMissing">Mark Missing</button> When collecting slaps, marks index as missing. When collecting dual thumbs, marks left thumb as missing.</p>
             <p>Estado: <span id="autocaptureStatus"></span></p>
-            <p style="display:none;">Preview Score: <span id="previewScore"></span></p>
+            <p>Calidad de la lectura: <span id="previewScore"></span></p>
 
             <button class="btn btn-info" id="reset">Reiniciar captura</button>
           </div>
@@ -157,24 +157,28 @@ include(FOLDER_HTML . 'include/header.php');
               <div class="huella-card-placeholder"></div>
               <img data-finger-code="10" style="display:none;">
               <div class="huella-card-label">Meñique<br>Mano Izquierda</div>
+              <div class="huella-card-score"></div>
               <button type="button" class="btn btn-sm btn-outline-secondary btn-recapturar" data-finger-code="10">Recapturar</button>
             </div>
             <div class="huella-card" data-finger-code="9">
               <div class="huella-card-placeholder"></div>
               <img data-finger-code="9" style="display:none;">
               <div class="huella-card-label">Anular<br>Mano Izquierda</div>
+              <div class="huella-card-score"></div>
               <button type="button" class="btn btn-sm btn-outline-secondary btn-recapturar" data-finger-code="9">Recapturar</button>
             </div>
             <div class="huella-card" data-finger-code="8">
               <div class="huella-card-placeholder"></div>
               <img data-finger-code="8" style="display:none;">
               <div class="huella-card-label">Medio<br>Mano Izquierda</div>
+              <div class="huella-card-score"></div>
               <button type="button" class="btn btn-sm btn-outline-secondary btn-recapturar" data-finger-code="8">Recapturar</button>
             </div>
             <div class="huella-card" data-finger-code="7">
               <div class="huella-card-placeholder"></div>
               <img data-finger-code="7" style="display:none;">
               <div class="huella-card-label">Índice<br>Mano Izquierda</div>
+              <div class="huella-card-score"></div>
               <button type="button" class="btn btn-sm btn-outline-secondary btn-recapturar" data-finger-code="7">Recapturar</button>
             </div>
           </div>
@@ -183,24 +187,28 @@ include(FOLDER_HTML . 'include/header.php');
               <div class="huella-card-placeholder"></div>
               <img data-finger-code="5" style="display:none;">
               <div class="huella-card-label">Meñique<br>Mano Derecha</div>
+              <div class="huella-card-score"></div>
               <button type="button" class="btn btn-sm btn-outline-secondary btn-recapturar" data-finger-code="5">Recapturar</button>
             </div>
             <div class="huella-card" data-finger-code="4">
               <div class="huella-card-placeholder"></div>
               <img data-finger-code="4" style="display:none;">
               <div class="huella-card-label">Anular<br>Mano Derecha</div>
+              <div class="huella-card-score"></div>
               <button type="button" class="btn btn-sm btn-outline-secondary btn-recapturar" data-finger-code="4">Recapturar</button>
             </div>
             <div class="huella-card" data-finger-code="3">
               <div class="huella-card-placeholder"></div>
               <img data-finger-code="3" style="display:none;">
               <div class="huella-card-label">Medio<br>Mano Derecha</div>
+              <div class="huella-card-score"></div>
               <button type="button" class="btn btn-sm btn-outline-secondary btn-recapturar" data-finger-code="3">Recapturar</button>
             </div>
             <div class="huella-card" data-finger-code="2">
               <div class="huella-card-placeholder"></div>
               <img data-finger-code="2" style="display:none;">
               <div class="huella-card-label">Índice<br>Mano Derecha</div>
+              <div class="huella-card-score"></div>
               <button type="button" class="btn btn-sm btn-outline-secondary btn-recapturar" data-finger-code="2">Recapturar</button>
             </div>
           </div>
@@ -209,12 +217,14 @@ include(FOLDER_HTML . 'include/header.php');
               <div class="huella-card-placeholder"></div>
               <img data-finger-code="6" style="display:none;">
               <div class="huella-card-label">Pulgar<br>Izquierdo</div>
+              <div class="huella-card-score"></div>
               <button type="button" class="btn btn-sm btn-outline-secondary btn-recapturar" data-finger-code="6">Recapturar</button>
             </div>
             <div class="huella-card" data-finger-code="1">
               <div class="huella-card-placeholder"></div>
               <img data-finger-code="1" style="display:none;">
               <div class="huella-card-label">Pulgar<br>Derecho</div>
+              <div class="huella-card-score"></div>
               <button type="button" class="btn btn-sm btn-outline-secondary btn-recapturar" data-finger-code="1">Recapturar</button>
             </div>
           </div>
@@ -228,6 +238,7 @@ include(FOLDER_HTML . 'include/header.php');
           #resultados .huella-card img { object-fit: cover; border: 1px solid #ccc; }
           #resultados .huella-card-placeholder { background: #f0f0f0; border: 1px dashed #ccc; }
           #resultados .huella-card-label { margin-top: 4px; color: #555; line-height: 1.2; }
+          #resultados .huella-card-score { margin-top: 2px; font-size: 13px; font-weight: 600; color: #333; min-height: 1em; }
           #resultados .btn-recapturar { margin-top: 6px; font-size: 13px; padding: 4px 8px; width: 100%; }
         </style>
         <script>

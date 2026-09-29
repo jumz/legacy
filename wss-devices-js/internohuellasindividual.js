@@ -133,7 +133,7 @@ function onAutocaptureStatus(status) {
 // internohuellasindividual.php) en vez de crear un <img> nuevo y agregarlo al final -- mismo
 // rediseño ya confirmado en hardware para internohuellas.php ("aplica esto mismo para la
 // lectura individual y para huellas roladas"), pedido explícito del usuario, 2026-09-29.
-function appendImage(imageData, fingerCode)
+function appendImage(imageData, fingerCode, score)
 {
     if (fingerCode === undefined) return;
     var img = document.querySelector('#resultados img[data-finger-code="' + fingerCode + '"]');
@@ -142,6 +142,8 @@ function appendImage(imageData, fingerCode)
     img.style.display = "";
     var placeholder = img.parentElement ? img.parentElement.querySelector('.huella-card-placeholder') : null;
     if (placeholder) placeholder.style.display = "none";
+    var scoreEl = img.parentElement ? img.parentElement.querySelector('.huella-card-score') : null;
+    if (scoreEl) scoreEl.textContent = (score !== undefined && score !== null) ? ('Calidad: ' + score) : '';
 }
 
 // Vacía (vuelve a mostrar el placeholder gris) la tarjeta de UN dedo -- a diferencia de
@@ -154,6 +156,8 @@ function clearFingerImage(fingerCode) {
     img.style.display = "none";
     var placeholder = img.parentElement ? img.parentElement.querySelector('.huella-card-placeholder') : null;
     if (placeholder) placeholder.style.display = "";
+    var scoreEl = img.parentElement ? img.parentElement.querySelector('.huella-card-score') : null;
+    if (scoreEl) scoreEl.textContent = '';
 }
 
 // FingerprintCaptureApi.Finger (código de la tarjeta, ver CHECKBOX_TO_FINGER más abajo) ->
@@ -203,61 +207,81 @@ function onCapturedImage(base64Image) {
         {
             setComponent.getSegmentedImage(FingerprintSetApi.Impression.PLAIN_LEFT_LITTLE_FINGER,
                 FingerprintSetApi.ImageFormat.PNG).then( function(imageData){
-                appendImage(imageData, FingerprintCaptureApi.Finger.LEFT_LITTLE_FINGER);
+                setComponent.getNfiqScore(FingerprintSetApi.Impression.PLAIN_LEFT_LITTLE_FINGER).then(function(score){
+                    appendImage(imageData, FingerprintCaptureApi.Finger.LEFT_LITTLE_FINGER, score);
+                }).catch(function(){ appendImage(imageData, FingerprintCaptureApi.Finger.LEFT_LITTLE_FINGER); });
             });
         }else if(impression === FingerprintCaptureApi.Impression.PLAIN_LEFT_RING_FINGER)
         {
             setComponent.getSegmentedImage(FingerprintSetApi.Impression.PLAIN_LEFT_RING_FINGER,
                 FingerprintSetApi.ImageFormat.PNG).then( function(imageData){
-                appendImage(imageData, FingerprintCaptureApi.Finger.LEFT_RING_FINGER);
+                setComponent.getNfiqScore(FingerprintSetApi.Impression.PLAIN_LEFT_RING_FINGER).then(function(score){
+                    appendImage(imageData, FingerprintCaptureApi.Finger.LEFT_RING_FINGER, score);
+                }).catch(function(){ appendImage(imageData, FingerprintCaptureApi.Finger.LEFT_RING_FINGER); });
             });
         }else if(impression === FingerprintCaptureApi.Impression.PLAIN_LEFT_MIDDLE_FINGER)
         {
             setComponent.getSegmentedImage(FingerprintSetApi.Impression.PLAIN_LEFT_MIDDLE_FINGER,
                 FingerprintSetApi.ImageFormat.PNG).then( function(imageData){
-                appendImage(imageData, FingerprintCaptureApi.Finger.LEFT_MIDDLE_FINGER);
+                setComponent.getNfiqScore(FingerprintSetApi.Impression.PLAIN_LEFT_MIDDLE_FINGER).then(function(score){
+                    appendImage(imageData, FingerprintCaptureApi.Finger.LEFT_MIDDLE_FINGER, score);
+                }).catch(function(){ appendImage(imageData, FingerprintCaptureApi.Finger.LEFT_MIDDLE_FINGER); });
             });
         }else if(impression === FingerprintCaptureApi.Impression.PLAIN_LEFT_INDEX_FINGER)
         {
             setComponent.getSegmentedImage(FingerprintSetApi.Impression.PLAIN_LEFT_INDEX_FINGER,
                 FingerprintSetApi.ImageFormat.PNG).then( function(imageData){
-                appendImage(imageData, FingerprintCaptureApi.Finger.LEFT_INDEX_FINGER);
+                setComponent.getNfiqScore(FingerprintSetApi.Impression.PLAIN_LEFT_INDEX_FINGER).then(function(score){
+                    appendImage(imageData, FingerprintCaptureApi.Finger.LEFT_INDEX_FINGER, score);
+                }).catch(function(){ appendImage(imageData, FingerprintCaptureApi.Finger.LEFT_INDEX_FINGER); });
             });
         }else if(impression === FingerprintCaptureApi.Impression.PLAIN_LEFT_THUMB)
         {
             setComponent.getSegmentedImage(FingerprintSetApi.Impression.PLAIN_LEFT_THUMB,
                 FingerprintSetApi.ImageFormat.PNG).then( function(imageData){
-                appendImage(imageData, FingerprintCaptureApi.Finger.LEFT_THUMB);
+                setComponent.getNfiqScore(FingerprintSetApi.Impression.PLAIN_LEFT_THUMB).then(function(score){
+                    appendImage(imageData, FingerprintCaptureApi.Finger.LEFT_THUMB, score);
+                }).catch(function(){ appendImage(imageData, FingerprintCaptureApi.Finger.LEFT_THUMB); });
             });
         }else if (impression === FingerprintCaptureApi.Impression.PLAIN_RIGHT_LITTLE_FINGER)
         {
             setComponent.getSegmentedImage(FingerprintSetApi.Impression.PLAIN_RIGHT_LITTLE_FINGER,
                 FingerprintSetApi.ImageFormat.PNG).then( function(imageData){
-                appendImage(imageData, FingerprintCaptureApi.Finger.RIGHT_LITTLE_FINGER);
+                setComponent.getNfiqScore(FingerprintSetApi.Impression.PLAIN_RIGHT_LITTLE_FINGER).then(function(score){
+                    appendImage(imageData, FingerprintCaptureApi.Finger.RIGHT_LITTLE_FINGER, score);
+                }).catch(function(){ appendImage(imageData, FingerprintCaptureApi.Finger.RIGHT_LITTLE_FINGER); });
             });
         }else if(impression === FingerprintCaptureApi.Impression.PLAIN_RIGHT_RING_FINGER)
         {
             setComponent.getSegmentedImage(FingerprintSetApi.Impression.PLAIN_RIGHT_RING_FINGER,
                 FingerprintSetApi.ImageFormat.PNG).then( function(imageData){
-                appendImage(imageData, FingerprintCaptureApi.Finger.RIGHT_RING_FINGER);
+                setComponent.getNfiqScore(FingerprintSetApi.Impression.PLAIN_RIGHT_RING_FINGER).then(function(score){
+                    appendImage(imageData, FingerprintCaptureApi.Finger.RIGHT_RING_FINGER, score);
+                }).catch(function(){ appendImage(imageData, FingerprintCaptureApi.Finger.RIGHT_RING_FINGER); });
             });
         }else if(impression === FingerprintCaptureApi.Impression.PLAIN_RIGHT_MIDDLE_FINGER)
         {
             setComponent.getSegmentedImage(FingerprintSetApi.Impression.PLAIN_RIGHT_MIDDLE_FINGER,
                 FingerprintSetApi.ImageFormat.PNG).then( function(imageData){
-                appendImage(imageData, FingerprintCaptureApi.Finger.RIGHT_MIDDLE_FINGER);
+                setComponent.getNfiqScore(FingerprintSetApi.Impression.PLAIN_RIGHT_MIDDLE_FINGER).then(function(score){
+                    appendImage(imageData, FingerprintCaptureApi.Finger.RIGHT_MIDDLE_FINGER, score);
+                }).catch(function(){ appendImage(imageData, FingerprintCaptureApi.Finger.RIGHT_MIDDLE_FINGER); });
             });
         }else if(impression === FingerprintCaptureApi.Impression.PLAIN_RIGHT_INDEX_FINGER)
         {
             setComponent.getSegmentedImage(FingerprintSetApi.Impression.PLAIN_RIGHT_INDEX_FINGER,
                 FingerprintSetApi.ImageFormat.PNG).then( function(imageData){
-                appendImage(imageData, FingerprintCaptureApi.Finger.RIGHT_INDEX_FINGER);
+                setComponent.getNfiqScore(FingerprintSetApi.Impression.PLAIN_RIGHT_INDEX_FINGER).then(function(score){
+                    appendImage(imageData, FingerprintCaptureApi.Finger.RIGHT_INDEX_FINGER, score);
+                }).catch(function(){ appendImage(imageData, FingerprintCaptureApi.Finger.RIGHT_INDEX_FINGER); });
             });
         }else if(impression === FingerprintCaptureApi.Impression.PLAIN_RIGHT_THUMB)
         {
             setComponent.getSegmentedImage(FingerprintSetApi.Impression.PLAIN_RIGHT_THUMB,
                 FingerprintSetApi.ImageFormat.PNG).then( function(imageData){
-                appendImage(imageData, FingerprintCaptureApi.Finger.RIGHT_THUMB);
+                setComponent.getNfiqScore(FingerprintSetApi.Impression.PLAIN_RIGHT_THUMB).then(function(score){
+                    appendImage(imageData, FingerprintCaptureApi.Finger.RIGHT_THUMB, score);
+                }).catch(function(){ appendImage(imageData, FingerprintCaptureApi.Finger.RIGHT_THUMB); });
             });
         }
 

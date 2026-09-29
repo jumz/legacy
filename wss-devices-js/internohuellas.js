@@ -107,7 +107,10 @@ function onAutocaptureStatus(status) {
 // llamada que no lo manda (dentro de onCapturedImage, rama de PLAIN_RIGHT_INDEX_FINGER --
 // código muerto heredado de una plantilla compartida: esa impresión nunca aparece en
 // impressionsToCapture de esta página, así que esa rama nunca corre en la práctica).
-function appendImage(imageData, fingerCode)
+// `score` (calidad NIST del dedo segmentado, ver setComponent.getNfiqScore) es opcional --
+// pedido explícito del usuario, 2026-09-29: "quiero que se muestre... al agregarla al div de
+// resultados". Se muestra en .huella-card-score, dentro de la misma tarjeta.
+function appendImage(imageData, fingerCode, score)
 {
     if (fingerCode === undefined) return;
     var img = document.querySelector('#resultados img[data-finger-code="' + fingerCode + '"]');
@@ -116,6 +119,8 @@ function appendImage(imageData, fingerCode)
     img.style.display = "";
     var placeholder = img.parentElement ? img.parentElement.querySelector('.huella-card-placeholder') : null;
     if (placeholder) placeholder.style.display = "none";
+    var scoreEl = img.parentElement ? img.parentElement.querySelector('.huella-card-score') : null;
+    if (scoreEl) scoreEl.textContent = (score !== undefined && score !== null) ? ('Calidad: ' + score) : '';
 }
 
 // Vacía (vuelve a mostrar el placeholder gris) las tarjetas de un grupo -- pedido explícito
@@ -129,6 +134,8 @@ function clearGroupImages(groupIndex) {
         img.style.display = "none";
         var placeholder = img.parentElement ? img.parentElement.querySelector('.huella-card-placeholder') : null;
         if (placeholder) placeholder.style.display = "";
+        var scoreEl = img.parentElement ? img.parentElement.querySelector('.huella-card-score') : null;
+        if (scoreEl) scoreEl.textContent = '';
     });
 }
 
@@ -215,7 +222,14 @@ function getSegments (){
                 var impression = ImpressionInfo.SingleFingerToFingerInSlap[fingerCode];
                 setComponent.getSegmentedImage(impression,
                     FingerprintSetApi.ImageFormat.PNG).then( function(imageData){
-                    appendImage(imageData, fingerCode);
+                    // Calidad NIST del dedo -- pedido explícito del usuario, 2026-09-29. Si
+                    // falla, se muestra la imagen igual, solo sin calificación (best effort,
+                    // no bloquear el resultado por esto).
+                    setComponent.getNfiqScore(impression).then(function (score) {
+                        appendImage(imageData, fingerCode, score);
+                    }).catch(function () {
+                        appendImage(imageData, fingerCode);
+                    });
                 });
             }
         })(positions[i]);
