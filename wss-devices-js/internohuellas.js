@@ -43,16 +43,20 @@ function isQualityRejected(score) {
 
 // Palabra de calidad que acompaña a la barra de "Calidad de la lectura" -- pedido explícito
 // del usuario, 2026-09-29: "hay que agregar la palabra... 1 = excelente, 2 = muy buena,
-// 3 = buena, 4 = regular, 5 = mala/pobre". Solo se muestra junto a la barra de vista previa,
-// no en las tarjetas de resultados.
+// 3 = buena, 4 = regular, 5 = mala/pobre". Pedido explícito de seguimiento el mismo día: en
+// internohuellas.php también debe verse en cada tarjeta del div de resultados, no solo en la
+// barra de vista previa.
 var QUALITY_TO_WORD = { 1: "Excelente", 2: "Muy buena", 3: "Buena", 4: "Regular", 5: "Mala/pobre" };
 var previewScoreWordElement = document.getElementById("previewScoreWord");
 
+function setQualityWord(el, score) {
+    if (!el) return;
+    el.textContent = (score !== undefined && score !== null && QUALITY_TO_WORD[score] !== undefined) ? QUALITY_TO_WORD[score] : "";
+}
+
 function setPreviewQuality(score) {
     setQualityBar(previewScoreElement, score);
-    if (previewScoreWordElement) {
-        previewScoreWordElement.textContent = (score !== undefined && score !== null && QUALITY_TO_WORD[score] !== undefined) ? QUALITY_TO_WORD[score] : "";
-    }
+    setQualityWord(previewScoreWordElement, score);
 }
 
 // Antes, si el WebSocket nunca lograba abrir (p.ej. BiometricBridge.App no está corriendo en
@@ -159,6 +163,8 @@ function appendImage(imageData, fingerCode, score)
     if (placeholder) placeholder.style.display = "none";
     var qualityFill = img.parentElement ? img.parentElement.querySelector('.huella-card-quality-fill') : null;
     setQualityBar(qualityFill, score);
+    var qualityWord = img.parentElement ? img.parentElement.querySelector('.huella-card-quality-word') : null;
+    setQualityWord(qualityWord, score);
 }
 
 // Vacía (vuelve a mostrar el placeholder gris) las tarjetas de un grupo -- pedido explícito
@@ -174,6 +180,8 @@ function clearGroupImages(groupIndex) {
         if (placeholder) placeholder.style.display = "";
         var qualityFill = img.parentElement ? img.parentElement.querySelector('.huella-card-quality-fill') : null;
         setQualityBar(qualityFill, undefined);
+        var qualityWord = img.parentElement ? img.parentElement.querySelector('.huella-card-quality-word') : null;
+        setQualityWord(qualityWord, undefined);
     });
 }
 

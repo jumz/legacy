@@ -54,11 +54,14 @@ function isQualityRejected(score) {
 var QUALITY_TO_WORD = { 1: "Excelente", 2: "Muy buena", 3: "Buena", 4: "Regular", 5: "Mala/pobre" };
 var previewScoreWordElement = document.getElementById("previewScoreWord");
 
+function setQualityWord(el, score) {
+    if (!el) return;
+    el.textContent = (score !== undefined && score !== null && QUALITY_TO_WORD[score] !== undefined) ? QUALITY_TO_WORD[score] : "";
+}
+
 function setPreviewQuality(score) {
     setQualityBar(previewScoreElement, score);
-    if (previewScoreWordElement) {
-        previewScoreWordElement.textContent = (score !== undefined && score !== null && QUALITY_TO_WORD[score] !== undefined) ? QUALITY_TO_WORD[score] : "";
-    }
+    setQualityWord(previewScoreWordElement, score);
 }
 
 // Avanza impressionsIndex saltando cualquier dedo ya marcado como "missing" (desmarcado por el
@@ -174,6 +177,8 @@ function appendImage(imageData, fingerCode, score)
     if (placeholder) placeholder.style.display = "none";
     var qualityFill = img.parentElement ? img.parentElement.querySelector('.huella-card-quality-fill') : null;
     setQualityBar(qualityFill, score);
+    var qualityWord = img.parentElement ? img.parentElement.querySelector('.huella-card-quality-word') : null;
+    setQualityWord(qualityWord, score);
 }
 
 // Vacía (vuelve a mostrar el placeholder gris) la tarjeta de UN dedo -- aquí cada botón
@@ -187,6 +192,8 @@ function clearFingerImage(fingerCode) {
     if (placeholder) placeholder.style.display = "";
     var qualityFill = img.parentElement ? img.parentElement.querySelector('.huella-card-quality-fill') : null;
     setQualityBar(qualityFill, undefined);
+    var qualityWord = img.parentElement ? img.parentElement.querySelector('.huella-card-quality-word') : null;
+    setQualityWord(qualityWord, undefined);
 }
 
 // FingerprintCaptureApi.Finger (código de la tarjeta) -> FingerprintCaptureApi.Impression
