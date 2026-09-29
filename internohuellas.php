@@ -272,15 +272,16 @@ include(FOLDER_HTML . 'include/header.php');
           </div>
         </div>
         <style>
-          /* Pedido explícito del usuario, 2026-09-29: las imágenes deben ocupar todo el
-             ancho de su fila -- antes cada tarjeta tenía un ancho fijo (92px), dejando
-             espacio vacío a la derecha en filas más anchas que el contenido. Ahora cada
-             tarjeta crece a partes iguales (flex:1) hasta llenar la fila completa; el
-             ancho de cada imagen depende de cuántas tarjetas tenga esa fila (4 en las
-             manos, 2 en pulgares -- por eso los pulgares se ven más anchos, no es un bug). */
           #resultados.resultados-grid { display: flex; flex-direction: column; gap: 14px; margin-top: 10px; }
-          #resultados .resultados-fila { display: flex; gap: 12px; }
-          #resultados .huella-card { flex: 1 1 0; min-width: 0; text-align: center; font-size: 15px; }
+          /* Cuadrícula de 4 columnas FIJAS para las 3 filas (4/4/2) -- pedido explícito del
+             usuario, 2026-09-29: "mantente el tamaño de huellas de los pulgares del tamaño de
+             los otros dedos". Antes cada tarjeta crecía (flex:1) para llenar su fila completa,
+             así que las tarjetas de pulgares (solo 2 por fila) salían más anchas que las de
+             manos (4 por fila). Con columnas fijas, cada tarjeta mide siempre 1/4 del ancho
+             total sin importar cuántas tenga esa fila -- la fila de pulgares deja las últimas
+             2 columnas vacías en vez de estirar sus 2 tarjetas. */
+          #resultados .resultados-fila { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+          #resultados .huella-card { min-width: 0; text-align: center; font-size: 15px; }
           #resultados .huella-card img,
           #resultados .huella-card-placeholder { display: block; width: 100%; height: auto; aspect-ratio: 3 / 4; border-radius: 4px; }
           #resultados .huella-card img { object-fit: cover; border: 1px solid #ccc; }
