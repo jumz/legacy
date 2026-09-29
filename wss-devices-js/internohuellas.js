@@ -466,8 +466,25 @@ document.addEventListener("DOMContentLoaded", function () {
     markMissingElement.onclick = onMarkMissing;
     EnableMarkMissing(false);
     resetElement.onclick = onReset;
+    numberCheckboxLabels();
     connect();
 });
+
+// Antepone el número de dedo (mismo código FingerprintCaptureApi.Finger que ya usa
+// CHECKBOX_TO_FINGER, ej. 10=meñique izquierdo) a la etiqueta de cada checkbox de omisión --
+// pedido explícito del usuario, 2026-09-29: "tambien agrega la numeración a los check". El
+// texto de la etiqueta viene del backend ($huella['nombre'], internohuellas.php) así que se
+// modifica aquí en vez de tocar ese archivo. CHECKBOX_TO_FINGER se define más abajo en este
+// archivo, pero para cuando DOMContentLoaded dispara este callback ya se ejecutó todo el
+// script (orden normal del navegador), así que ya está poblado.
+function numberCheckboxLabels() {
+    Object.keys(CHECKBOX_TO_FINGER).forEach(function (checkboxId) {
+        var label = document.querySelector('label[for="' + checkboxId + '"]');
+        var number = CHECKBOX_TO_FINGER[checkboxId];
+        if (!label || number === undefined) return;
+        label.textContent = number + ' ' + label.textContent;
+    });
+}
 
 // Checkbox de cada dedo (ver internohuellas.php, ya no disabled) -> código
 // FingerprintCaptureApi.Finger correspondiente -- pedido explícito del usuario, 2026-09-25
