@@ -29,13 +29,14 @@ $('#btnGuardarContinuar').click(function(){
 
 
 // previewMode: "scene" -- pedido explícito del usuario, 2026-09-30: "en lugar de usar el modo
-// 'capture face' usa 'capture scene' y el live después de tomar la foto no debe detenerse". Con
-// esto, la vista previa continua que se abre al conectar (ver _resumeIdlePreview en iCam.js) ya
-// arranca en modo "scene" -- así captureScene() reutiliza esa MISMA sesión sin necesitar
-// cerrarla/reabrirla (lo que sí cortaría el live un instante). También evita el cuelgue
-// confirmado de "capture face" con pose=Profile (PressButton sin llegar OnGetFaceImage -- ver
-// ProfileArmSettleDelay/FacePose en el puente): scene no usa StartCapture/PressButton en
-// absoluto. Ver la nota extensa en TD100Client.captureScene()/Td200CameraModule.CaptureScene.
+// 'capture face' usa 'capture scene'". Con esto, la vista previa continua que se abre al
+// conectar (ver _resumeIdlePreview en iCam.js) ya arranca en modo "scene" -- así captureScene()
+// reutiliza esa MISMA sesión sin necesitar cerrarla/reabrirla. La razón real para usar Scene en
+// esta página (perfil): evita el cuelgue confirmado de "capture face" con pose=Profile
+// (PressButton sin llegar OnGetFaceImage -- ver ProfileArmSettleDelay/FacePose en el puente).
+// CONFIRMADO contra el demo del fabricante: capturar en modo Scene SÍ pausa el live un
+// instante, igual que Face -- no evita esa pausa, solo evita el cuelgue de perfil. Ver la nota
+// extensa en TD100Client.captureScene()/Td200CameraModule.CaptureSceneAsync (puente).
 const cam = new TD100Client({
     wsUrl: "ws://localhost:20008/",
     liveImg: document.getElementById("photoImage"),
