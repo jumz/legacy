@@ -660,16 +660,26 @@ class TD100Client {
             case "camera.preview.frame":
                 this.lastLiveTs = Date.now();
 
-                if (this.autoFaceUIActive) {
-                    this._autoFaceCheckFrame(msg.base64, msg.range);
-                    break;
-                }
-
+                // Bug real reportado por el usuario (2026-09-30): en modo AutoFace, CADA frame
+                // de vista previa se escribía en `autoFaceImg` (finalImage, el <img> del div de
+                // resultados) en vez de en `liveImg` (photoImage) -- la rama de abajo que
+                // actualiza liveImg nunca corría mientras autoFaceUIActive fuera true (el
+                // `break` de la versión anterior la saltaba). Efecto visible: photoImage se
+                // congelaba en el último frame antes de activar AutoFace, y finalImage mostraba
+                // el video en vivo en vez de quedarse con la última foto real capturada. Ahora
+                // liveImg SIEMPRE se actualiza con cada frame, sin importar el modo; solo la
+                // imagen final de una captura real (ver _handleAutoFaceCaptureResult) toca
+                // autoFaceImg -- _autoFaceCheckFrame ya no escribe ahí, solo analiza el frame
+                // para la heurística de quietud (ver más abajo).
                 if (this.liveImg) this.liveImg.src = "data:image/jpeg;base64," + msg.base64;
 
                 if (this.cameraConnected &&
                     this.statusLabel && this.statusLabel.textContent === "Live detenido") {
                     this.setStatus("Cámara conectada", "success");
+                }
+
+                if (this.autoFaceUIActive) {
+                    this._autoFaceCheckFrame(msg.base64, msg.range);
                 }
                 break;
 
@@ -1096,7 +1106,10 @@ class TD100Client {
     // confirmado para iris); si nunca llega, el comportamiento cae de vuelta a la heurística de
     // quietud de siempre, sin romper nada.
     _autoFaceCheckFrame(base64, range) {
-        if (this.autoFaceImg) this.autoFaceImg.src = "data:image/jpeg;base64," + base64;
+        // Ya NO escribe en autoFaceImg (finalImage) -- ver el comentario en handleMessage,
+        // caso "camera.preview.frame". autoFaceImg solo debe reflejar una captura REAL
+        // (_handleAutoFaceCaptureResult), no cada frame de vista previa mientras se busca
+        // estabilidad.
         if (this._autoFaceCapturing) return; // ya se disparó una captura, esperando resultado
 
         if (range === "operating") {
