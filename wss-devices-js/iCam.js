@@ -1257,19 +1257,20 @@ class TD100Client {
     // "Capture scene" -- pedido explícito del usuario, 2026-09-30, para
     // internorostromanual.php/internoperfilizquierdo.php/internoperfilderecho.php: en vez de
     // "capture face" (que se cuelga con pose=Profile sin presionar el botón físico de la
-    // cámara -- ver Td200CameraModule.CaptureFaceAsync/ProfileArmSettleDelay en el puente). El
-    // puente arma CamMode.Scene y hace StartCapture+PressButton igual que Face (ver
-    // Td200CameraModule.CaptureSceneAsync) -- CONFIRMADO por el usuario contra el demo del
-    // fabricante que el live SÍ hace una pausa breve al capturar en modo Scene, igual que con
-    // Face; la ventaja de Scene es que no se cuelga con perfil, no que evite esa pausa. El
-    // resultado llega etiquetado "face" (mismo camino que captureFace en _handleCaptureResult,
-    // el puente reusa el mismo evento nativo OnGetFaceImage) -- por eso reutiliza
-    // expectManualFace/manualFaceTimer sin necesitar ningún cambio ahí.
+    // cámara -- ver Td200CameraModule.CaptureFaceAsync/ProfileArmSettleDelay en el puente).
     //
-    // A diferencia de captureFace(), todavía NO se reintenta ante error/timeout -- Scene es
-    // nuevo y sin confirmar en hardware real si necesita el mismo reintento automático que
-    // rostro/iris ya tienen (ver _retryOrFailFace). Si en hardware resulta que también se
-    // cuelga o falla intermitentemente, agregar ese reintento aquí siguiendo el mismo patrón.
+    // CONFIRMADO EN HARDWARE (2026-09-30, con logging temporal del lado del puente): armar
+    // CamMode.Scene y hacer StartCapture+PressButton NUNCA dispara el evento de imagen lista en
+    // esta variante del SDK de la cámara (ni ningún otro evento) -- no es un problema de
+    // márgenes de tiempo, esta variante simplemente no tiene un evento de captura para Scene.
+    // Por eso el puente (ver Td200CameraModule.CaptureSceneAsync) toma como foto final el
+    // último frame de vista previa que ya se estaba transmitiendo, SIN tocar
+    // SetLive/StartCapture/PressButton -- así el live nunca se interrumpe (a diferencia de
+    // "capture face", que sí lo detiene brevemente). Limitación aceptada explícitamente por el
+    // usuario: la foto queda a la resolución/calidad de la vista previa, no la más alta que usa
+    // "capture face". El resultado llega etiquetado "face" igual (mismo camino que captureFace
+    // en _handleCaptureResult) -- por eso reutiliza expectManualFace/manualFaceTimer sin
+    // necesitar ningún cambio ahí.
     captureScene() {
         if (this.isBusy || this.autoFaceUIActive) return;
 

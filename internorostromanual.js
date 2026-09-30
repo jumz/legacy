@@ -45,10 +45,14 @@ $('#btnGuardarContinuar').click(function(){
 // previewMode: "scene" -- pedido explícito del usuario, 2026-09-30: "en lugar de usar el modo
 // 'capture face' usa 'capture scene'". Con esto, la vista previa continua que se abre al
 // conectar (ver _resumeIdlePreview en iCam.js) ya arranca en modo "scene" -- así captureScene()
-// reutiliza esa MISMA sesión sin necesitar cerrarla/reabrirla. CONFIRMADO contra el demo del
-// fabricante: capturar en modo Scene SÍ pausa el live un instante, igual que Face -- la ventaja
-// real de Scene es que no se cuelga con pose de perfil, no que evite esa pausa. Ver la nota
-// extensa en TD100Client.captureScene()/Td200CameraModule.CaptureSceneAsync (puente).
+// reutiliza esa MISMA sesión sin necesitar cerrarla/reabrirla. CONFIRMADO EN HARDWARE que el
+// SDK "LGI" de la cámara no tiene ningún evento de captura para CamMode.Scene (StartCapture+
+// PressButton devuelven éxito pero nunca llega ninguna imagen) -- por eso el puente toma como
+// foto final el último frame de vista previa ya transmitido, sin tocar
+// SetLive/StartCapture/PressButton: el live NUNCA se interrumpe (a diferencia de "capture
+// face", que sí lo detiene brevemente). Limitación aceptada explícitamente por el usuario: la
+// foto queda a la resolución/calidad de la vista previa. Ver la nota extensa en
+// TD100Client.captureScene()/Td200CameraModule.CaptureSceneAsync (puente).
 const cam = new TD100Client({
     wsUrl: "ws://localhost:20008/",
     liveImg: document.getElementById("photoImage"),

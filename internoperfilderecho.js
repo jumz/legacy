@@ -48,9 +48,12 @@ $('#btnGuardarContinuar').click(function(){
 // reutiliza esa MISMA sesión sin necesitar cerrarla/reabrirla. La razón real para usar Scene en
 // esta página (perfil): evita el cuelgue confirmado de "capture face" con pose=Profile
 // (PressButton sin llegar OnGetFaceImage -- ver ProfileArmSettleDelay/FacePose en el puente).
-// CONFIRMADO contra el demo del fabricante: capturar en modo Scene SÍ pausa el live un
-// instante, igual que Face -- no evita esa pausa, solo evita el cuelgue de perfil. Ver la nota
-// extensa en TD100Client.captureScene()/Td200CameraModule.CaptureSceneAsync (puente).
+// CONFIRMADO EN HARDWARE que el SDK "LGI" de la cámara no tiene ningún evento de captura para
+// CamMode.Scene (StartCapture+PressButton devuelven éxito pero nunca llega ninguna imagen) --
+// por eso el puente toma como foto final el último frame de vista previa ya transmitido, sin
+// tocar SetLive/StartCapture/PressButton: el live NUNCA se interrumpe. Limitación aceptada
+// explícitamente por el usuario: la foto queda a la resolución/calidad de la vista previa. Ver
+// la nota extensa en TD100Client.captureScene()/Td200CameraModule.CaptureSceneAsync (puente).
 const cam = new TD100Client({
     wsUrl: "ws://localhost:20008/",
     liveImg: document.getElementById("photoImage"),
