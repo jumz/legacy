@@ -76,5 +76,5 @@ include(FOLDER_HTML . 'include/header.php');
         </section>
     </div>
 </main>
-<script src="<?php echo $path_app; ?>js/lib/iCam.js"></script>
+<script src="<?php echo $path_app; ?>js/lib/iCam.js?v=icam2"></script>
 <?php include(FOLDER_HTML . 'include/footer.php'); ?>
