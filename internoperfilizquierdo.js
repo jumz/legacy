@@ -28,10 +28,19 @@ $('#btnGuardarContinuar').click(function(){
 
 
 
+// previewMode: "scene" -- pedido explícito del usuario, 2026-09-30: "en lugar de usar el modo
+// 'capture face' usa 'capture scene' y el live después de tomar la foto no debe detenerse". Con
+// esto, la vista previa continua que se abre al conectar (ver _resumeIdlePreview en iCam.js) ya
+// arranca en modo "scene" -- así captureScene() reutiliza esa MISMA sesión sin necesitar
+// cerrarla/reabrirla (lo que sí cortaría el live un instante). También evita el cuelgue
+// confirmado de "capture face" con pose=Profile (PressButton sin llegar OnGetFaceImage -- ver
+// ProfileArmSettleDelay/FacePose en el puente): scene no usa StartCapture/PressButton en
+// absoluto. Ver la nota extensa en TD100Client.captureScene()/Td200CameraModule.CaptureScene.
 const cam = new TD100Client({
     wsUrl: "ws://localhost:20008/",
     liveImg: document.getElementById("photoImage"),
     faceImg: document.getElementById("finalImage"),
+    previewMode: "scene",
     //autoFaceImg: document.getElementById("finalImage"),
     //irisRightImg: document.getElementById("irisRight"),
     //irisLeftImg: document.getElementById("irisLeft"),
@@ -47,7 +56,7 @@ const cam = new TD100Client({
 //document.getElementById("btnSleepToggle").onclick = () => cam.toggleSleep();
 
 //document.getElementById("manualCapture").onclick = () => cam.captureFace();
-document.getElementById("manualCapture").onclick = () => cam.captureFace("profile");
+document.getElementById("manualCapture").onclick = () => cam.captureScene();
 document.getElementById("btnReconnect").addEventListener("click", () => {
   cam.manualReconnect();
 });

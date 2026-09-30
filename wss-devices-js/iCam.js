@@ -33,9 +33,10 @@
  * solo se abre justo antes de una captura real (`captureIris`) y se cierra siempre al terminar
  * -- igual que el comportamiento original antes de esta vista previa continua.
  *
- * setLed/sleep/wakeup/toggleSleep/captureScene: sin equivalente en WSS-DEVICES hoy (decisión ya
- * tomada, ver plan) -- quedan como no-op seguro (no truenan, actualizan el status a un mensaje
- * claro de "no disponible" en vez de fingir que funcionaron).
+ * setLed/sleep/wakeup/toggleSleep: sin equivalente en WSS-DEVICES hoy (decisión ya tomada, ver
+ * plan) -- quedan como no-op seguro (no truenan, actualizan el status a un mensaje claro de "no
+ * disponible" en vez de fingir que funcionaron). captureScene() SÍ tiene implementación real
+ * desde 2026-09-30 -- ver la nota extensa junto al método.
  *
  * autoFace(enable): el original delegaba la detección "¿el rostro ya es válido para capturar?"
  * al firmware de la cámara (ICAO), que mandaba mensajes `autoFace` con status
@@ -1253,9 +1254,45 @@ class TD100Client {
         this.send({ type: "camera.capture", requestId: this._previewRequestId, capture: "iris", eye: mode });
     }
 
-    // Sin equivalente en WSS-DEVICES (no existe un modo "escena") -- no-op seguro.
+    // "Capture scene" -- pedido explícito del usuario, 2026-09-30, para
+    // internorostromanual.php/internoperfilizquierdo.php/internoperfilderecho.php: en vez de
+    // "capture face" (que SIEMPRE apaga el streaming antes de tomar la foto -- ver
+    // Td200CameraModule.CaptureFaceAsync en el puente -- y que además se cuelga con
+    // pose=Profile sin presionar el botón físico de la cámara), el puente ahora soporta un
+    // modo "scene" que NUNCA toca SetLive/StartCapture/PressButton: toma como foto final el
+    // frame de vista previa que ya se está transmitiendo en ese instante. Limitación aceptada
+    // explícitamente por el usuario: la foto queda a la resolución/calidad de la vista previa,
+    // no la más alta que usa "capture face". El resultado llega etiquetado "face" (mismo
+    // camino que captureFace en _handleCaptureResult) -- por eso reutiliza expectManualFace/
+    // manualFaceTimer sin necesitar ningún cambio ahí.
+    //
+    // A diferencia de captureFace(), NO se reintenta ante error/timeout: no hay round-trip real
+    // al hardware (solo re-codificar un frame ya en memoria del lado del puente), así que un
+    // fallo aquí es casi seguro un problema real (WS caído, o la sesión de vista previa nunca
+    // llegó a recibir un frame) donde reintentar a ciegas no ayuda -- se muestra el error tal
+    // cual (camino genérico ya existente en handleMessage/startCapturePending).
     captureScene() {
-        this.setStatus("Captura de escena no disponible en este puente.", "warning");
+        if (this.isBusy || this.autoFaceUIActive) return;
+
+        this.expectManualFace = true;
+        if (this.manualFaceTimer) clearTimeout(this.manualFaceTimer);
+        this.manualFaceTimer = setTimeout(() => {
+            this.expectManualFace = false;
+        }, this.captureTimeoutMs + 500);
+
+        this.markBusy(this.captureTimeoutMs + 1000);
+        this.startCapturePending("scene", this.captureTimeoutMs);
+
+        this.setStatus("Capturando...", "info");
+
+        // La vista previa de escena debe estar YA abierta desde que la cámara conectó (ver
+        // _resumeIdlePreview + config.previewMode: "scene") -- capturar solo pide "quédate con
+        // el frame actual", sin abrir/cerrar ninguna sesión. Por las dudas de que todavía no
+        // hubiera ninguna (p.ej. clic justo al conectar), se arma una antes de capturar.
+        if (!this._previewRequestId || this._previewMode !== "scene") {
+            this._startPreview("scene");
+        }
+        this.send({ type: "camera.capture", requestId: this._previewRequestId, capture: "scene" });
     }
 
     manualReconnect() {
