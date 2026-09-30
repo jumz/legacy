@@ -1,3 +1,17 @@
+// Pedido explícito del usuario, 2026-09-30: quitar el modal de "Éxito" al guardar en esta
+// página. mostrarExito/mostrarExitoHTML (definidas en el JS global compartido, cargado ANTES
+// que este archivo -- ver footer.php) también hacen la redirección a `siguiente` cuando el
+// operador da clic en "OK" -- para no romper esa navegación, se sobreescriben aquí para que
+// redirijan de inmediato sin mostrar nada. Solo afecta a ESTA página (cada página carga su
+// propio wiring script, que sobreescribe la función global solo para sí misma) -- las páginas
+// de huellas, que usan el mismo mostrarExito, no se tocan.
+function mostrarExito(mensaje, siguiente) {
+    if (siguiente) window.location.href = siguiente;
+}
+function mostrarExitoHTML(html, siguiente) {
+    if (siguiente) window.location.href = siguiente;
+}
+
 // #finalImage se renderiza sin atributo src hasta que una captura real lo llena --
 // $('#finalImage').attr('src') devuelve undefined en ese caso, no '' (mismo bug confirmado en
 // internorostro.js, 2026-09-22).
